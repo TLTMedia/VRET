@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>A-Frame VRMA Animation Queue</title>
+    <meta name="description" content="A component to play a sequence of VRMA animations on a VRM model with blending.">
+    <script src="js/aframe-v1.7.1.js"></script>
+    <script src="js/aframe-environment-component.js"></script>
+    <script src="js/three-vrm.js"></script>
+    <script src="js/three-vrm-animation.js"></script>
+    <script src="js/aframe-vrm-bundle.js"></script>
+</head>
+<body>
+
+<script>
+    AFRAME.registerComponent('a-frame-vrma-queue', {
+        schema: {
+            vrm: { type: 'string', default: '' },
+            anims: { type: 'string', default: '' }, // Comma-separated list of animation files
+            blendDuration: { type: 'number', default: 0.5 },
+            legSpread: { type: 'number', default: -0.5 }
+        },
+
+        init: function () {
+            this.vrm = null;
+            this.mixer = null;
+            this.actions = [];
+            this.currentActionIndex = 0;
+            this.loader = new THREE.GLTFLoader();
+            this.loader.register((parser) => new THREE.VRMAnimationLoaderPlugin(parser));
+
+            this.leftUpperLeg = null;
+            this.rightUpperLeg = null;
+            this.zAxis = new THREE.Vector3(0, 0, 1);
+            this.leftOffset = new THREE.Quaternion();
+            this.rightOffset = new THREE.Quaternion();
+
+            this.onModelLoaded = this.onModelLoaded.bind(this);
+            this.playNextAnimation = this.playNextAnimation.bind(this);
+
+            this.el.addEventListener('model-loaded', this.onModelLoaded);
+        },
+
+        update: function (oldData) {
+            if (this.data.vrm && this.data.vrm !== oldData.vrm) {
+                this.loadVRM(this.data.vrm);
+            }
+
+            if (this.data.anims && this.data.anims !== oldData.anims && this.vrm) {
+                this.loadAnimationQueue();
+            }
+        },
+
+        loadVRM: function(vrmUrl) {
+            this.el.setAttribute('vrm', 'src', vrmUrl);
+        },
+
+        onModelLoaded: function (evt) {
+            const vrm = evt.detail.vrm;
+            if (!vrm) return;
+
+            console.log('VRM Model loaded:', this.data.vrm);
+            this.vrm = vrm;
+
+            this.setupMixer();
+            this.setupLegBones();
+
+            if (this.data.anims) {
+                this.loadAnimationQueue();
+            }
+        },
+
+        setupMixer: function() {
+            if (this.el.components.vrm && this.el.components.vrm.mixer) {
+                this.mixer = this.el.components.vrm.mixer;
+            } else {
+                console.warn('Mixer not found, creating a new one.');
+                this.mixer = new THREE.AnimationMixer(this.vrm.scene);
+            }
+            this.mixer.addEventListener('finished', this.playNextAnimation);
+        },
+
+        setupLegBones: function() {
+            if (this.vrm.humanoid) {
+                this.leftUpperLeg = this.vrm.humanoid.getBoneNode('leftUpperLeg');
+                this.rightUpperLeg = this.vrm.humanoid.getBoneNode('rightUpperLeg');
+            }
+        },
+
+
+        loadAnimationQueue: async function () {
+            if (!this.vrm || !this.mixer) return;
+
+            const animUrls = this.parseAnimationUrls(this.data.anims);
+            if (animUrls.length === 0) return;
+
+            console.log('Loading animation queue:', animUrls);
+
+            this.actions = [];
+            
+            for (const url of animUrls) {
+                await this.loadVRMA(url);
+            }
+
+            this.startAnimationQueue();
+        },
+
+        parseAnimationUrls: function(anims) {
+            return anims.split(',').map(s => s.trim()).filter(s => s);
+        },
+
+        startAnimationQueue: function() {
+            if (this.actions.length > 0) {
+                this.currentActionIndex = 0;
+                this.actions[this.currentActionIndex].play();
+                console.log('Playing first animation.');
+            }
+        },
+
+        loadVRMA: async function(url) {
+            try {
+                const gltf = await this.loader.loadAsync(url);
+                const vrmAnimation = gltf.userData.vrmAnimations[0];
+                if (vrmAnimation) {
+                    const clip = THREE.createVRMAnimationClip(vrmAnimation, this.vrm);
+                    const action = this.mixer.clipAction(clip);
+                    action.loop = THREE.LoopOnce;
+                    action.clampWhenFinished = true;
+                    this.actions.push(action);
+                }
+            } catch (err) {
+                console.error('Error loading animation:', url, err);
+            }
+        },
+
+        playNextAnimation: function(e) {
+            const lastAction = e.action;
+            this.currentActionIndex = (this.currentActionIndex + 1) % this.actions.length;
+            const nextAction = this.actions[this.currentActionIndex];
+
+            console.log(`Fading from animation ${this.actions.indexOf(lastAction)} to ${this.currentActionIndex}`);
+            
+            nextAction.reset();
+            nextAction.play();
+            lastAction.crossFadeTo(nextAction, this.data.blendDuration, true);
+        },
+
+        tick: function (time, deltaTime) {
+            
+            if (this.mixer) {
+                this.mixer.update(deltaTime / 1000);
+            }
+            this.updateLegSpread();
+        },
+
+        updateLegSpread: function() {
+            if (this.leftUpperLeg && this.rightUpperLeg && this.data.legSpread !== 0) {
+                const spreadAngle = this.data.legSpread * Math.PI / 4; 
+
+                this.leftOffset.setFromAxisAngle(this.zAxis, spreadAngle);
+                this.rightOffset.setFromAxisAngle(this.zAxis, -spreadAngle);
+
+                this.leftUpperLeg.quaternion.premultiply(this.leftOffset);
+                this.rightUpperLeg.quaternion.premultiply(this.rightOffset);
+            }
+        },
+
+        remove: function () {
+            this.el.removeEventListener('model-loaded', this.onModelLoaded);
+            if (this.mixer) {
+                this.mixer.removeEventListener('finished', this.playNextAnimation);
+            }
+            this.actions.forEach(action => action.stop());
+        }
+    });
+</script>
+
+<a-scene>
+    <a-sky color="#001a33"></a-sky>
+    
+    <a-plane position="0 0 0" rotation="-90 0 0" width="50" height="50" color="#003366" shadow="receive: true"></a-plane>
+    <a-entity light="type: ambient; intensity: 0.5;"></a-entity>
+    <a-entity light="type: directional; intensity: 0.8; castShadow: true;" position="2 4 2"></a-entity>
+    <a-entity position="0 1.6 2">
+        <a-camera></a-camera>
+    </a-entity>
+
+    <!-- Usage Example for the queue component -->
+    <a-entity 
+        id="my-avatar-queue"
+        a-frame-vrma-queue="vrm: models/Black/Black_F_2_Busi.vrm; anims: vrma/02_01.vrma, vrma/01_02.vrma, vrma/01_03.vrma, vrma/01_04.vrma; blendDuration: 0.5"
+        position="0 0 -4" 
+        rotation="0 180 0"
+        shadow="cast: true">
+    </a-entity>
+
+</a-scene>
+
+</body>
+</html>
