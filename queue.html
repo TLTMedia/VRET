@@ -17,7 +17,8 @@
             vrm: { type: 'string', default: '' },
             anims: { type: 'string', default: '' }, // Comma-separated list of animation files
             blendDuration: { type: 'number', default: 0.5 },
-            legSpread: { type: 'number', default: -0.5 }
+            legSpread: { type: 'number', default: -0.5 },
+            rootMotion: { type: 'boolean', default: true }
         },
 
         init: function () {
@@ -28,6 +29,10 @@
             this.loader = new THREE.GLTFLoader();
             this.loader.register((parser) => new THREE.VRMAnimationLoaderPlugin(parser));
 
+            this.hips = null;
+            this.lastFinishPos = new THREE.Vector3();
+            this.lastFinishRot = new THREE.Quaternion();
+            this.transitioningFrom = null;
             this.leftUpperLeg = null;
             this.rightUpperLeg = null;
             this.zAxis = new THREE.Vector3(0, 0, 1);
@@ -62,7 +67,7 @@
             this.vrm = vrm;
 
             this.setupMixer();
-            this.setupLegBones();
+            this.setupBones();
 
             if (this.data.anims) {
                 this.loadAnimationQueue();
@@ -79,10 +84,14 @@
             this.mixer.addEventListener('finished', this.playNextAnimation);
         },
 
-        setupLegBones: function() {
+        setupBones: function() {
             if (this.vrm.humanoid) {
                 this.leftUpperLeg = this.vrm.humanoid.getBoneNode('leftUpperLeg');
                 this.rightUpperLeg = this.vrm.humanoid.getBoneNode('rightUpperLeg');
+                this.hips = this.vrm.humanoid.getBoneNode('hips');
+                if (this.hips) {
+                    this.lastFinishPos.copy(this.hips.position);
+                }
             }
         },
 
@@ -134,6 +143,33 @@
 
         playNextAnimation: function(e) {
             const lastAction = e.action;
+            
+            // Store the ending position and rotation to offset the next animation
+            if (this.hips) {
+                // --- Position Offset ---
+                this.lastFinishPos.copy(this.hips.position);
+                this.lastFinishPos.y = 0; // Ignore vertical movement for root motion
+
+                // Apply the displacement to the entity
+                // We use the entity's current rotation because the displacement is relative to that orientation
+                const displacement = this.lastFinishPos.clone();
+                displacement.applyQuaternion(this.el.object3D.quaternion);
+                this.el.object3D.position.add(displacement);
+
+                // --- Rotation Offset ---
+                // Extract only the Y-axis rotation (yaw) from the hips
+                const currentHipsRot = this.hips.quaternion.clone();
+                const euler = new THREE.Euler().setFromQuaternion(currentHipsRot, 'YXZ');
+                euler.x = 0;
+                euler.z = 0;
+                this.lastFinishRot.setFromEuler(euler);
+
+                // Apply this rotation to the entity
+                this.el.object3D.quaternion.multiply(this.lastFinishRot);
+                
+                console.log('Accumulated displacement:', this.lastFinishPos, 'Rotation:', euler.y);
+            }
+
             this.currentActionIndex = (this.currentActionIndex + 1) % this.actions.length;
             const nextAction = this.actions[this.currentActionIndex];
 
@@ -142,13 +178,39 @@
             nextAction.reset();
             nextAction.play();
             lastAction.crossFadeTo(nextAction, this.data.blendDuration, true);
+            
+            this.transitioningFrom = lastAction;
         },
 
         tick: function (time, deltaTime) {
-            
             if (this.mixer) {
                 this.mixer.update(deltaTime / 1000);
             }
+
+            // Handle Root Motion Blending
+            if (this.data.rootMotion && this.hips && this.transitioningFrom) {
+                const weight = this.transitioningFrom.getEffectiveWeight();
+                if (weight > 0) {
+                    // 1. Position Fix: Subtract the accumulated offset weighted by the fade
+                    this.hips.position.x -= this.lastFinishPos.x * weight;
+                    this.hips.position.z -= this.lastFinishPos.z * weight;
+
+                    // 2. Rotation Fix: Counter-rotate the hips
+                    // We need to apply the inverse of the rotation we just added to the parent,
+                    // scaled by the weight.
+                    // At weight 1 (start), we want full inverse. At weight 0 (end), we want identity.
+                    const inverseRot = this.lastFinishRot.clone().invert();
+                    const correction = new THREE.Quaternion().identity().slerp(inverseRot, weight);
+                    
+                    // Apply correction. Since we modified the parent, we are effectively 
+                    // rotating the coordinate system of the hips. To cancel it, we premultiply.
+                    this.hips.quaternion.premultiply(correction);
+
+                } else {
+                    this.transitioningFrom = null;
+                }
+            }
+
             this.updateLegSpread();
         },
 
@@ -187,7 +249,7 @@
     <!-- Usage Example for the queue component -->
     <a-entity 
         id="my-avatar-queue"
-        a-frame-vrma-queue="vrm: models/Black/Black_F_2_Busi.vrm; anims: vrma/02_01.vrma, vrma/01_02.vrma, vrma/01_03.vrma, vrma/01_04.vrma; blendDuration: 0.5"
+        a-frame-vrma-queue="vrm: models/Black/Black_F_2_Busi.vrm; anims: vrma/32_01.vrma, vrma/91_02.vrma, vrma/21_03.vrma, vrma/99_04.vrma; blendDuration: 0.5"
         position="0 0 -4" 
         rotation="0 180 0"
         shadow="cast: true">
