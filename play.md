@@ -90,6 +90,10 @@ A utility library to:
 - **Asset Buffering**: The system will parse the script and ensure all VRM/VRMA files are in memory *before* allowing the "Play" button to be clicked.
 - **Blending & IK**: Uses Three.js `AnimationMixer` cross-fading for smooth transitions between scripted actions.
 - **Lip-Sync Integration**: Automatic mapping of Rhubarb/Oculus visemes from JSON to VRM expressions (A, I, U, E, O).
+- **Enhanced Expression & ARKit Support**: The system is designed to leverage models processed by `vrm_cleanup_enhanced.py`. These "Cleaned" models provide:
+    - **Standardized Visemes**: Reliable mapping for `A, I, U, E, O, F, M, S, CH, K, N`.
+    - **ARKit Compatibility**: Access to 52 granular facial shapes (e.g., `eyeBlinkLeft`, `jawOpen`, `mouthSmile`) for high-fidelity emotional performances.
+    - **Teeth Syncing**: Automatic driving of teeth meshes during speech.
 - **Coordinate System**: Support for both absolute positions and relative offsets (e.g., "move 2 meters forward").
 
 ## 4. User-Friendly Interface

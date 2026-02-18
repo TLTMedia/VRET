@@ -1,0 +1,71 @@
+{
+  "metadata": {
+    "title": "The Welcome Scene",
+    "description": "Two characters meet and greet",
+    "environment": "forest"
+  },
+  "actors": [
+    { 
+      "id": "hero", 
+      "vrm": "models/Asian/Asian_F_1_Casual.vrm", 
+      "startPosition": {"x": -2, "y": 0, "z": -3},
+      "startRotation": {"y": 0}
+    },
+    { 
+      "id": "stranger", 
+      "vrm": "models/Black/Black_M_1_Busi.vrm", 
+      "startPosition": {"x": 2, "y": 0, "z": -3},
+      "startRotation": {"y": 0}
+    }
+  ],
+  "timeline": [
+    {
+      "start": 0.0,
+      "actor": "hero",
+      "action": "animate",
+      "clip": "vrma/02_01.vrma",
+      "loop": true,
+      "duration": 3.0,
+      "description": "Hero walks in"
+    },
+    {
+      "start": 0.0,
+      "actor": "hero",
+      "action": "move",
+      "to": {"x": -0.5, "y": 0, "z": -3},
+      "duration": 3.0
+    },
+    {
+      "start": 0.0,
+      "actor": "stranger",
+      "action": "animate",
+      "clip": "vrma/02_01.vrma",
+      "loop": true,
+      "duration": 3.0,
+      "description": "Stranger walks in"
+    },
+    {
+      "start": 0.0,
+      "actor": "stranger",
+      "action": "move",
+      "to": {"x": 0.5, "y": 0, "z": -3},
+      "duration": 3.0
+    },
+    {
+      "start": 3.0,
+      "actor": "hero",
+      "action": "animate",
+      "clip": "vrma/111_37.vrma",
+      "loop": false,
+      "description": "Hero waves"
+    },
+    {
+      "start": 4.0,
+      "actor": "stranger",
+      "action": "speak",
+      "audio": "audio/houston.wav",
+      "lipSync": "audio/houston.json",
+      "text": "Hello! Welcome to the VRM Environment."
+    }
+  ]
+}

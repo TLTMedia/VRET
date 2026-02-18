@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VRM Play System - Machinima Engine</title>
+    <meta name="description" content="Multi-character performance engine for VRMs">
+    <script src="js/aframe-v1.7.1.js"></script>
+    <script>
+        // THREE r152+ renamed mergeBufferGeometries -> mergeGeometries
+        if (THREE.BufferGeometryUtils && !THREE.BufferGeometryUtils.mergeBufferGeometries)
+            THREE.BufferGeometryUtils.mergeBufferGeometries = THREE.BufferGeometryUtils.mergeGeometries;
+    </script>
+    <script src="js/aframe-environment-component.js"></script>
+    <script src="js/three-vrm.js"></script>
+    <script src="js/three-vrm-animation.js"></script>
+    <script src="js/aframe-vrm-bundle.js"></script>
+    <script src="js/vrm-play-system.js"></script>
+</head>
+<body>
+
+<style>
+    #ui {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        background: rgba(0,0,0,0.8);
+        padding: 20px;
+        border-radius: 10px;
+        color: white;
+        font-family: sans-serif;
+        text-align: center;
+        min-width: 300px;
+    }
+    button {
+        background: #4CAF50;
+        border: none;
+        color: white;
+        padding: 10px 20px;
+        font-size: 16px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-top: 10px;
+    }
+    button:hover { background: #45a049; }
+    #status { color: #aaa; margin-bottom: 5px; font-size: 0.9em; }
+</style>
+
+<div id="ui">
+    <div id="status">Ready to load script...</div>
+    <div id="title">VRM Machinima Engine</div>
+    <button id="play-btn">START PERFORMANCE</button>
+</div>
+
+<script>
+    // UI Logic
+    window.addEventListener('DOMContentLoaded', () => {
+        const playBtn = document.getElementById('play-btn');
+        const status = document.getElementById('status');
+        const controller = document.querySelector('[vrm-play-controller]');
+
+        playBtn.addEventListener('click', () => {
+            controller.components['vrm-play-controller'].start();
+            playBtn.disabled = true;
+            status.textContent = "Performance Running...";
+        });
+
+        controller.addEventListener('play-started', () => {
+            const script = controller.components['vrm-play-controller'].script;
+            document.getElementById('title').textContent = script.metadata.title;
+        });
+    });
+</script>
+
+<a-scene>
+    <!-- Environment -->
+    <a-entity environment="preset: forest; dressingAmount: 500; shadow: true"></a-entity>
+    
+    <!-- Lights -->
+    <a-entity light="type: ambient; intensity: 0.5;"></a-entity>
+    <a-entity light="type: directional; intensity: 0.8; castShadow: true;" position="1 4 2"></a-entity>
+
+    <!-- Camera -->
+    <a-entity position="0 1.6 2">
+        <a-camera></a-camera>
+    </a-entity>
+
+    <!-- The Play Controller -->
+    <!-- It will automatically spawn actors from the script -->
+    <a-entity vrm-play-controller="src: scene_01.json; autoplay: false; debug: true"></a-entity>
+
+</a-scene>
+
+</body>
+</html>

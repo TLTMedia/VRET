@@ -36,8 +36,7 @@
         schema: {
             src: { type: 'string', default: 'animations.json' },
             vrm: { type: 'string', default: 'models/avatar.vrm' },
-            blendWindow: { type: 'number', default: 1.0 }, // Seconds before end to start blending
-            legSpread: { type: 'number', default: -0.5 }
+            blendWindow: { type: 'number', default: 1.0 } // Seconds before end to start blending
         },
 
         init: function () {
@@ -50,13 +49,6 @@
             this.nextAction = null; // For crossfading
             this.isLoading = false;
             
-            // Leg fix variables
-            this.leftUpperLeg = null;
-            this.rightUpperLeg = null;
-            this.zAxis = new THREE.Vector3(0, 0, 1);
-            this.leftOffset = new THREE.Quaternion();
-            this.rightOffset = new THREE.Quaternion();
-
             // Bindings
             this.onModelLoaded = this.onModelLoaded.bind(this);
 
@@ -101,12 +93,6 @@
                 this.mixer = this.el.components.vrm.mixer;
             } else {
                 this.mixer = new THREE.AnimationMixer(this.vrm.scene);
-            }
-
-            // Setup Leg Fix
-            if (this.vrm.humanoid) {
-                this.leftUpperLeg = this.vrm.humanoid.getBoneNode('leftUpperLeg');
-                this.rightUpperLeg = this.vrm.humanoid.getBoneNode('rightUpperLeg');
             }
 
             if (this.playlist.length > 0) {
@@ -217,15 +203,6 @@
         },
 
         tick: function(t, dt) {
-            // Apply Leg Fix
-            if (this.leftUpperLeg && this.rightUpperLeg && this.data.legSpread !== 0) {
-                const spreadAngle = this.data.legSpread * Math.PI / 4; 
-                this.leftOffset.setFromAxisAngle(this.zAxis, spreadAngle);
-                this.rightOffset.setFromAxisAngle(this.zAxis, -spreadAngle);
-                this.leftUpperLeg.quaternion.premultiply(this.leftOffset);
-                this.rightUpperLeg.quaternion.premultiply(this.rightOffset);
-            }
-
             // Check animation progress
             if (this.currentAction && !this.transitionScheduled && !this.isLoading) {
                 const clip = this.currentAction.getClip();
@@ -279,7 +256,7 @@
     <!-- The sequence player -->
     <a-entity 
         id="avatar"
-        vrm-anim-sequence="vrm: models/Asian/Asian_F_1_Casual.vrm; src: animations.json; legSpread: -0.5; blendWindow: 1.0"
+        vrm-anim-sequence="vrm: models/Asian/Asian_F_1_Casual.vrm; src: animations.json; blendWindow: 1.0"
         position="0 0 -4" 
         rotation="0 180 0"
         shadow="cast: true">
