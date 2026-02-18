@@ -1,0 +1,9 @@
+{
+  "emotions": [
+    { "t": 0.00, "type": "neutral",   "intensity": 1.0 },
+    { "t": 0.15, "type": "concerned", "intensity": 0.6 },
+    { "t": 1.05, "type": "stressed",  "intensity": 0.9 },
+    { "t": 1.60, "type": "concerned", "intensity": 0.5 },
+    { "t": 1.76, "type": "neutral",   "intensity": 1.0 }
+  ]
+}

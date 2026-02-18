@@ -57,6 +57,7 @@
     <div>Speech Lip-Sync Demo</div>
     <div id="status">Loading model...</div>
     <div id="current-viseme" class="highlight"></div>
+    <div id="current-emotion" class="highlight"></div>
     <div id="audio-time"></div>
 </div>
 
@@ -65,7 +66,107 @@
     <button id="stopBtn">Stop</button>
 </div>
 
+<!-- Start Dialog Overlay -->
+<div id="start-overlay">
+    <div class="dialog-content">
+        <h1>VRM Speech Demo</h1>
+        <p>Audio playback requires user interaction.</p>
+        <button id="start-demo-btn">Click to Start</button>
+    </div>
+</div>
+
+<style>
+    #start-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+    .dialog-content {
+        text-align: center;
+        color: white;
+        font-family: monospace;
+        background: #222;
+        padding: 40px;
+        border-radius: 10px;
+        border: 2px solid #00ff00;
+    }
+    #start-demo-btn {
+        font-size: 1.5em;
+        margin-top: 20px;
+        padding: 15px 30px;
+    }
+</style>
+
 <script>
+    // Handle AudioContext unlocking
+    document.addEventListener('DOMContentLoaded', () => {
+        const startBtn = document.getElementById('start-demo-btn');
+        const overlay = document.getElementById('start-overlay');
+        
+        startBtn.addEventListener('click', () => {
+            // Unlock A-Frame/Three.js AudioContext if present
+            const scene = document.querySelector('a-scene');
+            if (scene && scene.audioListener && scene.audioListener.context) {
+                scene.audioListener.context.resume();
+            }
+
+            // Bless the speech audio element
+            const avatar = document.getElementById('avatar');
+            if (avatar && avatar.components && avatar.components['speech-lipsync']) {
+                const speechComp = avatar.components['speech-lipsync'];
+                if (speechComp.audio) {
+                    // Play momentarily to unlock (volume 0)
+                    const originalVolume = speechComp.audio.volume;
+                    speechComp.audio.volume = 0;
+                    speechComp.audio.play().then(() => {
+                        speechComp.audio.pause();
+                        speechComp.audio.currentTime = 0;
+                        speechComp.audio.volume = originalVolume;
+                        console.log("Audio unlocked successfully");
+                    }).catch(e => {
+                        console.warn("Could not unlock audio:", e);
+                    });
+                }
+            }
+            
+            // Hide overlay
+            overlay.style.display = 'none';
+        });
+    });
+</script>
+
+<script>
+    // Emotion presets — blend shape recipes using confirmed available shapes
+    const EMOTIONS = {
+        neutral:   {},
+        happy:     { mouthSmileLeft: 0.7, mouthSmileRight: 0.7, cheekPuff: 0.15 },
+        sad:       { mouthFrownLeft: 0.6, mouthFrownRight: 0.6, browInnerUp: 0.5 },
+        angry:     { browDownLeft: 0.8, browDownRight: 0.8,
+                     noseSneerLeft: 0.3, noseSneerRight: 0.3,
+                     mouthPressLeft: 0.3, mouthPressRight: 0.3 },
+        surprised: { eyeWideLeft: 0.8, eyeWideRight: 0.8,
+                     browOuterUpLeft: 0.6, browOuterUpRight: 0.6,
+                     browInnerUp: 0.4, jawOpen: 0.25 },
+        concerned: { browInnerUp: 0.6, browDownLeft: 0.25, browDownRight: 0.25 },
+        stressed:  { browInnerUp: 0.4, browDownLeft: 0.5, browDownRight: 0.5,
+                     noseSneerLeft: 0.15, noseSneerRight: 0.15 },
+        fear:      { eyeWideLeft: 0.6, eyeWideRight: 0.6, browInnerUp: 0.7,
+                     browOuterUpLeft: 0.4, browOuterUpRight: 0.4 },
+        disgust:   { noseSneerLeft: 0.7, noseSneerRight: 0.7,
+                     mouthUpperUpLeft: 0.4, mouthUpperUpRight: 0.4,
+                     browDownLeft: 0.3, browDownRight: 0.3 }
+    };
+
+    // All shapes touched by any emotion — used for reset
+    const ALL_EMOTION_SHAPES = [...new Set(Object.values(EMOTIONS).flatMap(e => Object.keys(e)))];
+
     // Rhubarb mouth cue to our viseme mapping
     const RHUBARB_TO_VISEME = {
         'X': null,        // Rest position (neutral)
@@ -83,7 +184,8 @@
         schema: {
             vrm: { type: 'string', default: 'models/AIAN/AIAN_F_1_Casual_CLEANED.vrm' },
             audio: { type: 'string', default: 'audio/houston.wav' },
-            timings: { type: 'string', default: 'audio/houston.json' }
+            timings: { type: 'string', default: 'audio/houston.json' },
+            emotion: { type: 'string', default: 'audio/houston_emotion.json' }
         },
 
         init: function () {
@@ -91,8 +193,11 @@
             this.mesh = null;
             this.audio = null;
             this.mouthCues = [];
+            this.emotionCues = [];
             this.currentCueIndex = 0;
             this.isPlaying = false;
+            this.nextBlink  = 2000 + Math.random() * 2000;  // first blink 2–4s in
+            this.blinkStart = -9999;
 
             // Bindings
             this.onModelLoaded = this.onModelLoaded.bind(this);
@@ -106,6 +211,9 @@
 
             // Load timing data
             this.loadTimingData();
+
+            // Load emotion data
+            this.loadEmotionData();
 
             // Setup UI controls
             this.setupControls();
@@ -136,6 +244,76 @@
                 }
             });
             return found;
+        },
+
+        loadEmotionData: function() {
+            if (!this.data.emotion) return;
+            fetch(this.data.emotion)
+                .then(r => r.json())
+                .then(data => {
+                    this.emotionCues = data.emotions;
+                    console.log(`Loaded ${this.emotionCues.length} emotion keyframes`);
+                })
+                .catch(() => console.warn('No emotion data loaded'));
+        },
+
+        applyShape: function(name, value) {
+            if (this.mesh && this.mesh.morphTargetDictionary && this.mesh.morphTargetInfluences) {
+                if (name in this.mesh.morphTargetDictionary) {
+                    this.mesh.morphTargetInfluences[this.mesh.morphTargetDictionary[name]] = value;
+                }
+            }
+        },
+
+        tickEmotion: function(currentTime) {
+            if (!this.emotionCues || this.emotionCues.length === 0) return;
+
+            // Find the keyframe pair surrounding currentTime
+            let prevIdx = 0;
+            for (let i = 0; i < this.emotionCues.length - 1; i++) {
+                if (this.emotionCues[i].t <= currentTime) prevIdx = i;
+            }
+            const prev = this.emotionCues[prevIdx];
+            const next = this.emotionCues[Math.min(prevIdx + 1, this.emotionCues.length - 1)];
+
+            // Smoothstep alpha between keyframes
+            let alpha = 0;
+            if (next !== prev && next.t > prev.t) {
+                alpha = (currentTime - prev.t) / (next.t - prev.t);
+                alpha = Math.max(0, Math.min(1, alpha));
+                alpha = alpha * alpha * (3 - 2 * alpha);  // smoothstep
+            }
+
+            const prevShapes = EMOTIONS[prev.type] || {};
+            const nextShapes = EMOTIONS[next.type] || {};
+            const prevScale  = prev.intensity ?? 1;
+            const nextScale  = next.intensity ?? 1;
+
+            // Zero all possible emotion shapes, then apply interpolated values
+            for (const shape of ALL_EMOTION_SHAPES) {
+                const from = (prevShapes[shape] || 0) * prevScale;
+                const to   = (nextShapes[shape] || 0) * nextScale;
+                this.applyShape(shape, from + (to - from) * alpha);
+            }
+
+            // Update UI
+            const label = alpha < 0.5 ? prev.type : next.type;
+            document.getElementById('current-emotion').textContent = `emotion: ${label}`;
+        },
+
+        tickBlink: function(t) {
+            if (!this.mesh) return;
+            if (t > this.nextBlink) {
+                this.blinkStart = t;
+                this.nextBlink  = t + 3000 + Math.random() * 4000;  // next blink in 3–7s
+            }
+            const elapsed = t - this.blinkStart;
+            if (elapsed < 150) {
+                // close over first 75ms, open over next 75ms
+                const v = elapsed < 75 ? elapsed / 75 : 1 - (elapsed - 75) / 75;
+                this.applyShape('eyeBlinkLeft',  v);
+                this.applyShape('eyeBlinkRight', v);
+            }
         },
 
         setupAudio: function() {
@@ -194,15 +372,19 @@
         resetVisemes: function() {
             if (!this.mesh) return;
 
-            // Set all visemes to 0
             ['A', 'I', 'U', 'E', 'O', 'F', 'M', 'S', 'CH', 'K', 'N'].forEach(viseme => {
                 this.applyViseme(viseme, 0);
             });
+            for (const shape of ALL_EMOTION_SHAPES) {
+                this.applyShape(shape, 0);
+            }
 
             document.getElementById('current-viseme').textContent = '';
+            document.getElementById('current-emotion').textContent = '';
         },
 
         tick: function(t, dt) {
+            this.tickBlink(t);
             if (!this.isPlaying || !this.audio || !this.mouthCues.length) return;
 
             const currentTime = this.audio.currentTime;
@@ -210,6 +392,9 @@
             // Update time display
             document.getElementById('audio-time').textContent =
                 `Time: ${currentTime.toFixed(2)}s`;
+
+            // Drive emotion layer
+            this.tickEmotion(currentTime);
 
             // Find current mouth cue
             while (this.currentCueIndex < this.mouthCues.length - 1 &&

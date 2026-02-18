@@ -7,7 +7,7 @@
 SEARCH_DIR="."
 
 # The Python script to run with Blender
-BLENDER_SCRIPT="vrm_cleanup.py"
+BLENDER_SCRIPT="vrm_cleanup_enhanced.py"
 
 # Check if the Blender script exists
 if [ ! -f "$BLENDER_SCRIPT" ]; then

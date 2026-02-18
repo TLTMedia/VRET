@@ -118,7 +118,21 @@
                     'noseSneerLeft', 'noseSneerRight'
                 ],
                 cheeks: [
-                    'cheekPuff'
+                    'cheekPuff',
+                    'cheekSquintLeft', 'cheekSquintRight'
+                ],
+                mouth_extra: [
+                    'mouthRollLower', 'mouthRollUpper',
+                    'mouthShrugLower', 'mouthShrugUpper'
+                ],
+                tongue: [
+                    'tongueOut'
+                ],
+                eye_look: [
+                    'eyeLookDownLeft', 'eyeLookDownRight',
+                    'eyeLookInLeft',   'eyeLookInRight',
+                    'eyeLookOutLeft',  'eyeLookOutRight',
+                    'eyeLookUpLeft',   'eyeLookUpRight'
                 ]
             };
 
@@ -211,14 +225,23 @@
             if (!this.mesh || !this.mesh.morphTargetDictionary) return;
 
             this.availableShapes = [];
-            for (let shape of this.allShapes) {
-                if (shape in this.mesh.morphTargetDictionary) {
-                    this.availableShapes.push(shape);
-                }
-            }
+            const dict = this.mesh.morphTargetDictionary;
 
-            console.log(`Available ARKit shapes: ${this.availableShapes.length}/${this.allShapes.length}`);
-            console.log('Available:', this.availableShapes);
+            console.group('ARKit blend shape audit (52 total)');
+            for (let cat in this.arkitShapes) {
+                const present = this.arkitShapes[cat].filter(s => s in dict);
+                const missing = this.arkitShapes[cat].filter(s => !(s in dict));
+                present.forEach(s => this.availableShapes.push(s));
+                console.group(`${cat} (${present.length}/${this.arkitShapes[cat].length})`);
+                if (present.length) console.log('%c present: ' + present.join(', '), 'color:#0f0');
+                if (missing.length) console.log('%c missing: ' + missing.join(', '), 'color:#f66');
+                console.groupEnd();
+            }
+            console.log(`Total available: ${this.availableShapes.length} / 52`);
+            console.groupEnd();
+
+            document.getElementById('shape-count').textContent =
+                `Available: ${this.availableShapes.length} of 52 ARKit shapes`;
         },
 
         setupControls: function() {
