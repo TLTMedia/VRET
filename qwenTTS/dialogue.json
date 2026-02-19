@@ -1,0 +1,84 @@
+{
+  "title": "The Curbstone Wait - Escalation",
+  "characters": {
+    "Sara": "Frustrated, punctual, and currently shivering on a sidewalk",
+    "Alex": "Well-meaning but chronically disorganized and perpetually 'five minutes away'"
+  },
+  "script": [
+    {
+      "character": "Sara",
+      "exposition": "Speaking into her phone while pacing back and forth on the sidewalk",
+      "line": "Alex, it is 7:15 We agreed on 6:45 The movie starts in ten minutes and I am literally watching the sun set on my hopes of seeing the trailers"
+    },
+    {
+      "character": "Alex",
+      "exposition": "Voice over the phone, accompanied by the steady rhythmic clicking of a turn signal",
+      "line": "I am so, so sorry! I’m turning onto your street right now Or, well, I’m two blocks away There was this weird detour near the post office"
+    },
+    {
+      "character": "Sara",
+      "exposition": "Stopping her pace to stare blankly at the empty road",
+      "line": "You said you were 'turning the corner' ten minutes ago Do you live in a world of infinite corners? Because from where I’m standing, the street is empty"
+    },
+    {
+      "character": "Alex",
+      "exposition": "Sounding breathless and slightly defensive",
+      "line": "I hit every red light, Sara! It’s like the universe doesn't want me to be on time today"
+    },
+    {
+      "character": "Sara",
+      "exposition": "Rubbing her temples in exasperation",
+      "line": "The universe doesn't have a grudge, Alex, you just don't have a watch This is the third time this week I can't keep being the person who stands on the curb like a hitchhiker while you 'find your keys'"
+    },
+    {
+      "character": "Alex",
+      "exposition": "The sound of a car engine revving slightly in the background",
+      "line": "Okay, okay, I hear you I’m pulling up now Look! Do you see my headlights?"
+    },
+    {
+      "character": "Sara",
+      "exposition": "Squinting into the distance at the quiet suburban street",
+      "line": "No I see a cat I see a mailbox I do not see a silver sedan"
+    },
+    {
+      "character": "Alex",
+      "exposition": "A long pause followed by the sound of a GPS recalculating",
+      "line": "Wait is your house the one with the blue door or the green door? I might have turned too early"
+    },
+    {
+      "character": "Sara",
+      "exposition": "Her voice dropping to a dangerous, low simmer",
+      "line": "You have been to my house forty times If you don't know which door is mine, it's because you aren't even on my street You're lying to cover up the fact that you just left your house, aren't you?"
+    },
+    {
+      "character": "Alex",
+      "exposition": "Stuttering, the sound of a seatbelt chime dinging in the background",
+      "line": "I'm not lying! I just I got distracted I had to feed the dog and then I couldn't find one of my shoes, and then—"
+    },
+    {
+      "character": "Sara",
+      "exposition": "Raising her voice, her frustration finally boiling over",
+      "line": "And then you decided my time was worth less than your left shoe! That’s what this is, Alex It’s not a 'quirk' and it’s not the universe It’s a total lack of respect for me"
+    },
+    {
+      "character": "Alex",
+      "exposition": "Sounding genuinely wounded and sharp",
+      "line": "Wow, okay! So I'm a terrible friend because I'm bad with a clock? I'm driving as fast as I can to see a movie I don't even like just to hang out with you!"
+    },
+    {
+      "character": "Sara",
+      "exposition": "Scoffing loudly, she starts walking away from the curb toward her own front door",
+      "line": "Don't do me any favors If it’s such a chore to show up when you say you will, then don't show up at all I’m going inside, I’m locking the door, and I’m watching Netflix alone"
+    },
+    {
+      "character": "Alex",
+      "exposition": "Yelling over the phone as the sound of tires screeching faintly occurs in the distance",
+      "line": "Sara, wait! I just turned the corner! I actually see you! Don't you dare go inside!"
+    },
+    {
+      "character": "Sara",
+      "exposition": "Sighing deeply and tapping a ride-share app on her phone screen to cancel her request, but not stopping her walk",
+      "line": "I’m calling an Uber If you make it to the theater by the end of the credits, I’ll save you some popcorn Maybe But right now? I don't even want to be in the same car as you"
+    }
+  ]
+}

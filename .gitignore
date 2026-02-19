@@ -9,6 +9,7 @@ Thumbs.db
 *~
 
 # Node.js dependencies
+coqui/
 node_modules/
 npm-debug.log*
 yarn-debug.log*
