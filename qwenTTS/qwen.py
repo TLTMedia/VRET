@@ -46,7 +46,7 @@ prompt_items_Cory = model.create_voice_clone_prompt(
 
 
 
-with open("../coqui/traffic.json", "r") as f:
+with open("./traffic.json", "r") as f:
    file_contents = f.read()
 # The file is automatically closed outside of the 'with' block
 dialogue = json.loads(file_contents)

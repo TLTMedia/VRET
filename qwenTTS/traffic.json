@@ -1,0 +1,69 @@
+{
+  "title": "The Traffic Stop: Solo",
+  "characters": {
+    "Jordan": "Young, stubborn, and defiant; believes his clean record makes him untouchable.",
+    "Officer Miller": "Strict and high-alert; interprets Jordan’s defiance as a potential threat."
+  },
+  "script": [
+    {
+      "character": "Officer Miller",
+      "exposition": "Rapping his heavy flashlight against the driver’s side window as Jordan looks on, appearing bored",
+      "line": "Window down all the way. Hands on the wheel. Now."
+    },
+    {
+      "character": "Jordan",
+      "exposition": "Sighing loudly and rolling the window down, but leaving one hand in his lap",
+      "line": "What? I'm already late."
+    },
+    {
+      "character": "Officer Miller",
+      "exposition": "Maintaining a strict posture and watching Jordan's movements closely",
+      "line": "I said both hands, son. Put that right hand where I can see it."
+    },
+    {
+      "character": "Jordan",
+      "exposition": "Speaking defiantly while keeping his hand out of sight",
+      "line": "It’s in my lap, man. I’m just trying to get my phone. I have rights, you know. Why did you even pull me over?"
+    },
+    {
+      "character": "Officer Miller",
+      "exposition": "Shining the light directly into Jordan’s eyes, his voice tightening",
+      "line": "You’re going to keep your hands on that wheel and you’re going to stop reaching into your lap. I don't know what you have down there. Is there a weapon in this vehicle?"
+    },
+    {
+      "character": "Jordan",
+      "exposition": "Laughing nervously and shaking his head in disbelief",
+      "line": "A weapon? Are you serious? I’m an honor student. I don’t have a weapon. I’m just reaching for my—"
+    },
+    {
+      "character": "Officer Miller",
+      "exposition": "Barking the command to interrupt Jordan's movement",
+      "line": "DON'T REACH! Every time you move your hand off that wheel, you're making a mistake. Do you understand me?"
+    },
+    {
+      "character": "Jordan",
+      "exposition": "Getting angry and suddenly reaching toward the passenger seat to grab his wallet from a bag",
+      "line": "Look, I'll just show you my ID so we can be done!"
+    },
+    {
+      "character": "Officer Miller",
+      "exposition": "Stepping back quickly, his hand hovering over his holster in a defensive stance",
+      "line": "STAY STILL! DON'T MOVE! Hands on the ceiling! Get your hands up on the ceiling of the car right now!"
+    },
+    {
+      "character": "Jordan",
+      "exposition": "Freezing in place, his face going pale as the severity of the situation hits him",
+      "line": "I... I was just getting my wallet. My hands are up. Look. My hands are up."
+    },
+    {
+      "character": "Officer Miller",
+      "exposition": "Keeping a firm tone while giving tactical instructions",
+      "line": "Slowly... use your left hand to open the door from the outside handle. Keep the other hand on the ceiling. If you drop that hand, we’re going to have a very different conversation."
+    },
+    {
+      "character": "Jordan",
+      "exposition": "His hands shaking violently as he reaches for the door handle",
+      "line": "Okay. Okay. I'm opening it. Don't... please don't do anything. I'm opening the door."
+    }
+  ]
+}
