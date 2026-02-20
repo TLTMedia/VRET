@@ -1,0 +1,282 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Babylon.js VRM+VRMA</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+  <style>
+    html, body, #renderCanvas { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #111; }
+    #ui {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      font: 13px monospace; color: #fff; text-align: center; pointer-events: none;
+    }
+    #description { max-width: 480px; opacity: 0.9; text-shadow: 0 1px 3px #000; }
+    #btn {
+      pointer-events: all; padding: 6px 18px; background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.4); color: #fff; border-radius: 4px;
+      cursor: pointer; font: 13px monospace;
+    }
+    #btn:hover { background: rgba(255,255,255,0.3); }
+    #status { opacity: 0.6; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+  <div id="ui">
+    <div id="description">Loading…</div>
+    <button id="btn">⟳ Random animation</button>
+    <div id="status"></div>
+  </div>
+  <script type="module">
+
+    const VRM_FILE  = 'models/AIAN/AIAN_F_1_Casual_CLEANED.vrm';
+    // VRMA from hash (e.g. babvrm.html#vrma/13_29.vrma), else random
+    const HASH_VRMA = location.hash.slice(1) || null;
+
+    window.animationReady = false;
+
+    // ---------------------------------------------------------------------------
+    // VRM humanoid bone parent map (VRM spec / three-vrm VRMHumanBoneParentMap)
+    // ---------------------------------------------------------------------------
+    const BONE_PARENT = {
+      hips: null,
+      spine: 'hips', chest: 'spine', upperChest: 'chest',
+      neck: 'upperChest', head: 'neck',
+      leftEye: 'head', rightEye: 'head', jaw: 'head',
+      leftShoulder: 'upperChest', leftUpperArm: 'leftShoulder',
+      leftLowerArm: 'leftUpperArm', leftHand: 'leftLowerArm',
+      rightShoulder: 'upperChest', rightUpperArm: 'rightShoulder',
+      rightLowerArm: 'rightUpperArm', rightHand: 'rightLowerArm',
+      leftUpperLeg: 'hips', leftLowerLeg: 'leftUpperLeg',
+      leftFoot: 'leftLowerLeg', leftToes: 'leftFoot',
+      rightUpperLeg: 'hips', rightLowerLeg: 'rightUpperLeg',
+      rightFoot: 'rightLowerLeg', rightToes: 'rightFoot',
+      leftThumbMetacarpal:  'leftHand',  leftThumbProximal: 'leftThumbMetacarpal',  leftThumbDistal: 'leftThumbProximal',
+      leftIndexProximal:    'leftHand',  leftIndexIntermediate: 'leftIndexProximal',  leftIndexDistal: 'leftIndexIntermediate',
+      leftMiddleProximal:   'leftHand',  leftMiddleIntermediate: 'leftMiddleProximal', leftMiddleDistal: 'leftMiddleIntermediate',
+      leftRingProximal:     'leftHand',  leftRingIntermediate: 'leftRingProximal',    leftRingDistal: 'leftRingIntermediate',
+      leftLittleProximal:   'leftHand',  leftLittleIntermediate: 'leftLittleProximal', leftLittleDistal: 'leftLittleIntermediate',
+      rightThumbMetacarpal: 'rightHand', rightThumbProximal: 'rightThumbMetacarpal', rightThumbDistal: 'rightThumbProximal',
+      rightIndexProximal:   'rightHand', rightIndexIntermediate: 'rightIndexProximal', rightIndexDistal: 'rightIndexIntermediate',
+      rightMiddleProximal:  'rightHand', rightMiddleIntermediate: 'rightMiddleProximal', rightMiddleDistal: 'rightMiddleIntermediate',
+      rightRingProximal:    'rightHand', rightRingIntermediate: 'rightRingProximal',  rightRingDistal: 'rightRingIntermediate',
+      rightLittleProximal:  'rightHand', rightLittleIntermediate: 'rightLittleProximal', rightLittleDistal: 'rightLittleIntermediate',
+    };
+
+    // Compute world-space quaternion by walking a node's parent chain.
+    function worldQuatOf(node) {
+      const chain = [];
+      let cur = node;
+      while (cur) {
+        chain.unshift(cur.rotationQuaternion?.clone() ?? BABYLON.Quaternion.Identity());
+        cur = cur.parent;
+      }
+      return chain.reduce((acc, q) => acc.multiply(q), BABYLON.Quaternion.Identity());
+    }
+
+    // ---------------------------------------------------------------------------
+    // DOM refs
+    // ---------------------------------------------------------------------------
+    const descEl   = document.getElementById('description');
+    const statusEl = document.getElementById('status');
+    const btn      = document.getElementById('btn');
+
+    // ---------------------------------------------------------------------------
+    // Load VRM loader + animations list
+    // ---------------------------------------------------------------------------
+    const [, animations] = await Promise.all([
+      new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      }),
+      fetch('animations.json').then(r => r.json()),
+    ]);
+
+    console.log(`[animations.json] ${animations.length} entries`);
+
+    // ---------------------------------------------------------------------------
+    // Scene setup
+    // ---------------------------------------------------------------------------
+    const canvas = document.getElementById('renderCanvas');
+    const engine = new BABYLON.Engine(canvas, true);
+    const scene  = new BABYLON.Scene(engine);
+
+    const camera = new BABYLON.ArcRotateCamera('cam', Math.PI / 2, Math.PI / 3, 3,
+      new BABYLON.Vector3(0, 0.9, 0), scene);
+    camera.attachControl(canvas, true);
+    camera.lowerRadiusLimit = 0.5;
+    camera.upperRadiusLimit = 10;
+
+    new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
+    const dirLight = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-1, -2, -1), scene);
+    dirLight.intensity = 0.5;
+
+    // ---------------------------------------------------------------------------
+    // Load VRM (once)
+    // ---------------------------------------------------------------------------
+    descEl.textContent = 'Loading VRM…';
+    await BABYLON.ImportMeshAsync(VRM_FILE, scene);
+    const vrmManager = scene.metadata?.vrmManagers?.[0];
+    if (!vrmManager) throw new Error('VRM manager not found');
+    console.log('[VRM] bones:', Object.keys(vrmManager.humanoidBone).length);
+
+    // Precompute VRM hips height (constant across animations)
+    const vrmHipsBone = vrmManager.humanoidBone['hips'];
+    const vrmHipsY    = vrmHipsBone?.absolutePosition?.y
+                      ?? vrmHipsBone?.getAbsolutePosition?.().y
+                      ?? 1;
+
+    // ---------------------------------------------------------------------------
+    // playAnimation — loads a VRMA and remaps it onto the VRM
+    // ---------------------------------------------------------------------------
+    let currentGroup = null;
+
+    async function playAnimation(entry) {
+      btn.disabled = true;
+      statusEl.textContent = 'loading…';
+      descEl.textContent   = entry.description;
+
+      // Stop & dispose previous animation group
+      if (currentGroup) {
+        currentGroup.stop();
+        currentGroup.dispose();
+        currentGroup = null;
+      }
+
+      // Remove previous vrmAnimationManagers (they accumulate on scene.metadata)
+      if (scene.metadata?.vrmAnimationManagers) {
+        scene.metadata.vrmAnimationManagers = [];
+      }
+
+      const assetContainer = await BABYLON.LoadAssetContainerAsync(entry.url, scene);
+      const vrmAnimManager = scene.metadata?.vrmAnimationManagers?.[0];
+      const animGroup      = assetContainer.animationGroups[0];
+
+      if (!vrmAnimManager?.animationMap || !animGroup) {
+        statusEl.textContent = 'failed — no animation data';
+        btn.disabled = false;
+        return;
+      }
+
+      // -- Build VRMA rest-pose world-quaternion map --
+      const vrmaWorldQuats = new Map();
+
+      animGroup.targetedAnimations.forEach((targeted, i) => {
+        const boneName = vrmAnimManager.animationMap.get(i);
+        if (!boneName || !targeted.target) return;
+        vrmaWorldQuats.set(boneName, worldQuatOf(targeted.target));
+        if (boneName === 'hips' && targeted.target.parent) {
+          vrmaWorldQuats.set('hipsParent', worldQuatOf(targeted.target.parent));
+        }
+      });
+
+      if (!vrmaWorldQuats.has('hipsParent')) {
+        vrmaWorldQuats.set('hipsParent', BABYLON.Quaternion.Identity());
+      }
+
+      // -- Translation scale: VRM hips height / VRMA hips height --
+      let translationScale = 1;
+      const hipsIdx = [...vrmAnimManager.animationMap.entries()]
+        .find(([, name]) => name === 'hips')?.[0];
+      if (hipsIdx != null) {
+        const vrmaHipsY = animGroup.targetedAnimations[hipsIdx]?.target?.absolutePosition?.y ?? 0;
+        if (vrmaHipsY !== 0) translationScale = vrmHipsY / vrmaHipsY;
+      }
+
+      // -- Remap using three-vrm-animation formula --
+      const remapped = new BABYLON.AnimationGroup('vrma-remapped');
+
+      animGroup.targetedAnimations.forEach((targeted, i) => {
+        const boneName = vrmAnimManager.animationMap.get(i);
+        const bone     = vrmManager.humanoidBone[boneName];
+        if (!bone) return;
+
+        const anim = targeted.animation.clone(`anim_${boneName}`);
+
+        if (anim.targetProperty === 'rotationQuaternion') {
+          const boneWQ    = vrmaWorldQuats.get(boneName) ?? BABYLON.Quaternion.Identity();
+          const boneWQInv = boneWQ.clone().invert();
+
+          let parentName = BONE_PARENT[boneName];
+          while (parentName && !vrmaWorldQuats.has(parentName)) {
+            parentName = BONE_PARENT[parentName];
+          }
+          const parentWQ = (parentName && vrmaWorldQuats.get(parentName))
+            ?? vrmaWorldQuats.get('hipsParent')
+            ?? BABYLON.Quaternion.Identity();
+
+          // three-vrm formula: parentWorldQuat * animQuat * boneWorldQuat⁻¹
+          anim.getKeys().forEach(kf => {
+            kf.value = parentWQ.clone().multiply(kf.value).multiply(boneWQInv);
+          });
+
+        } else if (anim.targetProperty === 'position' && boneName === 'hips') {
+          // Babylon.js glTF loader already converted coordinates; just scale height.
+          anim.getKeys().forEach(kf => {
+            kf.value = kf.value.scale(translationScale);
+          });
+        }
+
+        remapped.addTargetedAnimation(anim, bone);
+      });
+
+      remapped.start(true, 1.0, remapped.from, remapped.to, true);
+      currentGroup = remapped;
+
+      // Expose for Playwright sampling
+      window.scene        = scene;
+      window.remappedGroup = remapped;
+      window.animationReady = true;
+
+      statusEl.textContent = entry.url;
+      btn.disabled = false;
+      console.log('[Done]', entry.url, '— tracks:', remapped.targetedAnimations.length);
+    }
+
+    // Playwright hook: seek both engines to the same timestamp and read bone quats.
+    // Returns { boneName: {x,y,z,w} } for all mapped humanoid bones.
+    window.getBoneQuats = function(t) {
+      if (!window.remappedGroup || !window.scene) return null;
+      const fps = window.remappedGroup.targetedAnimations[0]?.animation?.framePerSecond ?? 60;
+      window.remappedGroup.goToFrame(t * fps);
+      window.scene.render();
+      const mgr = window.scene.metadata?.vrmManagers?.[0];
+      if (!mgr) return null;
+      const result = {};
+      for (const [name, bone] of Object.entries(mgr.humanoidBone)) {
+        const q = bone?.rotationQuaternion;
+        if (q) result[name] = { x: +q.x.toFixed(4), y: +q.y.toFixed(4), z: +q.z.toFixed(4), w: +q.w.toFixed(4) };
+      }
+      return result;
+    };
+
+    // ---------------------------------------------------------------------------
+    // Random picker
+    // ---------------------------------------------------------------------------
+    let lastIdx = -1;
+    function pickRandom() {
+      let idx;
+      do { idx = Math.floor(Math.random() * animations.length); } while (idx === lastIdx);
+      lastIdx = idx;
+      return animations[idx];
+    }
+
+    btn.addEventListener('click', () => playAnimation(pickRandom()));
+
+    // If a specific VRMA was given via hash, use it; otherwise pick random
+    const firstEntry = HASH_VRMA
+      ? (animations.find(a => a.url === HASH_VRMA) ?? { url: HASH_VRMA, description: HASH_VRMA })
+      : pickRandom();
+    await playAnimation(firstEntry);
+
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener('resize', () => engine.resize());
+
+  </script>
+</body>
+</html>

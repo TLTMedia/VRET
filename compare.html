@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>A-Frame vs Babylon.js — VRM Bone Comparison</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; display: flex; flex-direction: column; height: 100vh; font-family: monospace; }
+    #header {
+      background: #1a1a1a; color: #fff; padding: 6px 16px;
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 12px; border-bottom: 1px solid #333; flex-shrink: 0;
+    }
+    #header h1 { font-size: 13px; color: #0ff; }
+    #status { display: flex; gap: 16px; }
+    .ready-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #555; margin-right: 5px; }
+    .ready-dot.on { background: #0f0; }
+    #frames { display: flex; flex: 1; min-height: 0; }
+    .pane { flex: 1; display: flex; flex-direction: column; position: relative; }
+    .pane + .pane { border-left: 2px solid #333; }
+    .pane-label {
+      position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.7); color: #0ff; font-size: 11px;
+      padding: 2px 10px; border-radius: 3px; pointer-events: none; z-index: 10;
+    }
+    iframe { flex: 1; border: none; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <h1>🔬 A-Frame / three-vrm &nbsp;vs&nbsp; Babylon.js — jumping jacks (vrma/13_29.vrma)</h1>
+    <div id="status">
+      <span><span class="ready-dot" id="dot-af"></span>A-Frame</span>
+      <span><span class="ready-dot" id="dot-bab"></span>Babylon.js</span>
+    </div>
+  </div>
+  <div id="frames">
+    <div class="pane">
+      <div class="pane-label">A-Frame · three-vrm (reference)</div>
+      <iframe id="af"  src="animate.html?model=models/AIAN/AIAN_F_1_Casual_CLEANED.vrm#vrma/13_29.vrma"></iframe>
+    </div>
+    <div class="pane">
+      <div class="pane-label">Babylon.js (in progress)</div>
+      <iframe id="bab" src="babvrm.html#vrma/13_29.vrma"></iframe>
+    </div>
+  </div>
+  <script>
+    const dotAf  = document.getElementById('dot-af');
+    const dotBab = document.getElementById('dot-bab');
+    const afWin  = () => document.getElementById('af').contentWindow;
+    const babWin = () => document.getElementById('bab').contentWindow;
+
+    function poll() {
+      try { if (afWin().animationReady)  dotAf.classList.add('on');  } catch(e) {}
+      try { if (babWin().animationReady) dotBab.classList.add('on'); } catch(e) {}
+      if (!dotAf.classList.contains('on') || !dotBab.classList.contains('on')) {
+        setTimeout(poll, 400);
+      }
+    }
+    poll();
+  </script>
+</body>
+</html>

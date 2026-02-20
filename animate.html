@@ -85,10 +85,13 @@ const VRM_MODELS = [
     'models/NHPI/NHPI_M_1_Busi.vrm'
 ];
 
-// Pick random model
-const randomModel = VRM_MODELS[Math.floor(Math.random() * VRM_MODELS.length)];
+// ?model= query param overrides random pick (used by compare.html / Playwright)
+const params = new URLSearchParams(location.search);
+const randomModel = params.get('model') || VRM_MODELS[Math.floor(Math.random() * VRM_MODELS.length)];
 console.log('Selected model:', randomModel);
 document.getElementById('current-model').textContent = randomModel.split('/').pop();
+
+window.animationReady = false;
 
 // Get animation from hash
 const hashAnim = window.location.hash.substring(1); // remove #
@@ -153,6 +156,8 @@ AFRAME.registerComponent('anim-player', {
                     this.currentAction.enabled = true;
                     this.currentAction.timeScale = 1.0;
                     this.currentAction.play();
+                    window.animationReady = true;
+                    window._vrmComp = this;
 
                     console.log('Animation playing:', animUrl, 'duration:', clip.duration);
                 }
@@ -163,6 +168,28 @@ AFRAME.registerComponent('anim-player', {
         }
     }
 });
+
+// Playwright hook: seek to time t (seconds) and return bone quaternions.
+window.getBoneQuats = function(t) {
+    const comp = window._vrmComp;
+    if (!comp?.vrm || !comp?.mixer) return null;
+    comp.mixer.setTime(t);
+    comp.vrm.update(0);
+    const bones = ['hips','spine','chest','upperChest','neck','head',
+        'leftShoulder','leftUpperArm','leftLowerArm','leftHand',
+        'rightShoulder','rightUpperArm','rightLowerArm','rightHand',
+        'leftUpperLeg','leftLowerLeg','leftFoot',
+        'rightUpperLeg','rightLowerLeg','rightFoot'];
+    const result = {};
+    for (const bone of bones) {
+        const node = comp.vrm.humanoid.getNormalizedBoneNode(bone);
+        if (node?.quaternion) {
+            const q = node.quaternion;
+            result[bone] = { x: +q.x.toFixed(4), y: +q.y.toFixed(4), z: +q.z.toFixed(4), w: +q.w.toFixed(4) };
+        }
+    }
+    return result;
+};
 
 // Component to adjust leg spread
 AFRAME.registerComponent('leg-fixer', {
