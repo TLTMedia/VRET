@@ -52,3 +52,9 @@ build/
 *.zip
 *.tar.gz
 *.rar
+
+# Generated output
+screenshots/
+
+# Claude Code local settings
+.claude/

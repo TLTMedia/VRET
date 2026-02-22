@@ -20,6 +20,7 @@
 
 <style>
 #info-panel {
+    display: none;
     position: fixed;
     top: 10px;
     left: 10px;
@@ -286,6 +287,12 @@ AFRAME.registerComponent('leg-fixer', {
 setTimeout(() => {
     document.getElementById('avatar').setAttribute('vrm', 'src', randomModel);
 }, 100);
+
+// Cap pixel ratio to 1 (no HiDPI supersampling) to keep GPU load reasonable
+document.querySelector('a-scene').addEventListener('renderstart', () => {
+    const renderer = document.querySelector('a-scene').renderer;
+    if (renderer) renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
+}, { once: true });
 </script>
 
 </body>

@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "WebFetch(domain:rogueengine.io)",
-      "WebFetch(domain:docs.rogueengine.io)",
-      "WebFetch(domain:doc.babylonjs.com)"
-    ]
-  }
-}

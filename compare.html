@@ -2,62 +2,96 @@
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>A-Frame vs Babylon.js — VRM Bone Comparison</title>
+  <title>A-Frame vs Babylon — side by side</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; display: flex; flex-direction: column; height: 100vh; font-family: monospace; }
-    #header {
-      background: #1a1a1a; color: #fff; padding: 6px 16px;
-      display: flex; justify-content: space-between; align-items: center;
-      font-size: 12px; border-bottom: 1px solid #333; flex-shrink: 0;
-    }
-    #header h1 { font-size: 13px; color: #0ff; }
-    #status { display: flex; gap: 16px; }
-    .ready-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #555; margin-right: 5px; }
-    .ready-dot.on { background: #0f0; }
-    #frames { display: flex; flex: 1; min-height: 0; }
-    .pane { flex: 1; display: flex; flex-direction: column; position: relative; }
-    .pane + .pane { border-left: 2px solid #333; }
-    .pane-label {
-      position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.7); color: #0ff; font-size: 11px;
-      padding: 2px 10px; border-radius: 3px; pointer-events: none; z-index: 10;
-    }
-    iframe { flex: 1; border: none; width: 100%; height: 100%; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #222; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+    #controls { color: #aaa; font: 12px monospace; padding: 6px 8px; display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+    #controls label { color: #666; }
+    select { font: 12px monospace; background: #333; color: #ccc; border: 1px solid #555; padding: 2px 4px; }
+    button { font: 12px monospace; background: #444; color: #ccc; border: 1px solid #666; padding: 2px 10px; cursor: pointer; }
+    button:hover { background: #555; }
+    #frames { display: flex; gap: 6px; padding: 0 6px 6px; justify-content: center; }
+    .pane { display: flex; flex-direction: column; gap: 3px; }
+    .pane label { color: #666; font: 10px monospace; text-align: center; }
+    .pane.ready label { color: #4f4; }
+    iframe { width: 640px; height: 480px; border: 1px solid #444; background: #111; display: block; }
   </style>
 </head>
 <body>
-  <div id="header">
-    <h1>🔬 A-Frame / three-vrm &nbsp;vs&nbsp; Babylon.js — jumping jacks (vrma/13_29.vrma)</h1>
-    <div id="status">
-      <span><span class="ready-dot" id="dot-af"></span>A-Frame</span>
-      <span><span class="ready-dot" id="dot-bab"></span>Babylon.js</span>
-    </div>
+  <div id="controls">
+    <label>Animation:</label>
+    <select id="vrmaSelect" style="max-width:300px"></select>
+    <label>Model:</label>
+    <select id="modelSelect">
+      <option value="models/AIAN/AIAN_F_1_Casual_CLEANED.vrm">AIAN F1</option>
+      <option value="models/White/White_M_1_Casual_CLEANED.vrm">White M1</option>
+      <option value="models/Hispanic/Hispanic_M_3_Casual_CLEANED.vrm">Hispanic M3</option>
+    </select>
+    <button id="goBtn">Load</button>
+    <span id="readyState" style="color:#666">●● loading…</span>
   </div>
   <div id="frames">
-    <div class="pane">
-      <div class="pane-label">A-Frame · three-vrm (reference)</div>
-      <iframe id="af"  src="animate.html?model=models/AIAN/AIAN_F_1_Casual_CLEANED.vrm#vrma/13_29.vrma"></iframe>
+    <div class="pane" id="paneAf">
+      <label>A-Frame · three-vrm (reference)</label>
+      <iframe id="afFrame" allow="autoplay"></iframe>
     </div>
-    <div class="pane">
-      <div class="pane-label">Babylon.js (in progress)</div>
-      <iframe id="bab" src="babvrm.html#vrma/13_29.vrma"></iframe>
+    <div class="pane" id="paneBab">
+      <label>Babylon.js</label>
+      <iframe id="babFrame" allow="autoplay"></iframe>
     </div>
   </div>
   <script>
-    const dotAf  = document.getElementById('dot-af');
-    const dotBab = document.getElementById('dot-bab');
-    const afWin  = () => document.getElementById('af').contentWindow;
-    const babWin = () => document.getElementById('bab').contentWindow;
+    const FALLBACK_VRMAS = [
+      { url: 'vrma/02_01.vrma', description: '02_01 walk' },
+      { url: 'vrma/09_01.vrma', description: '09_01 walk' },
+      { url: 'vrma/13_29.vrma', description: '13_29 jumping jacks' },
+      { url: 'vrma/13_30.vrma', description: '13_30 jumping jacks' },
+    ];
 
-    function poll() {
-      try { if (afWin().animationReady)  dotAf.classList.add('on');  } catch(e) {}
-      try { if (babWin().animationReady) dotBab.classList.add('on'); } catch(e) {}
-      if (!dotAf.classList.contains('on') || !dotBab.classList.contains('on')) {
-        setTimeout(poll, 400);
-      }
+    const sel   = document.getElementById('vrmaSelect');
+    const goBtn = document.getElementById('goBtn');
+    const rs    = document.getElementById('readyState');
+
+    function populateSelect(list) {
+      sel.innerHTML = '';
+      list.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.url;
+        opt.textContent = (a.description || a.url).slice(0, 60);
+        if (a.url === 'vrma/02_01.vrma') opt.selected = true;
+        sel.appendChild(opt);
+      });
     }
-    poll();
+
+    fetch('animations.json').then(r => r.json()).then(populateSelect).catch(() => populateSelect(FALLBACK_VRMAS));
+
+    let pollTimer = null;
+
+    function load() {
+      clearInterval(pollTimer);
+      rs.style.color = '#666';
+      rs.textContent = '●● loading…';
+      document.getElementById('paneAf').classList.remove('ready');
+      document.getElementById('paneBab').classList.remove('ready');
+
+      const vrma  = sel.value;
+      const model = document.getElementById('modelSelect').value;
+      document.getElementById('afFrame').src  = `animate.html?model=${model}#${vrma}`;
+      document.getElementById('babFrame').src = `babvrm.html#${vrma}`;
+
+      let afOk = false, babOk = false;
+      pollTimer = setInterval(() => {
+        try { if (!afOk  && document.getElementById('afFrame').contentWindow.animationReady)  { afOk  = true; document.getElementById('paneAf').classList.add('ready');  } } catch(e) {}
+        try { if (!babOk && document.getElementById('babFrame').contentWindow.animationReady) { babOk = true; document.getElementById('paneBab').classList.add('ready'); } } catch(e) {}
+        if (afOk && babOk) { clearInterval(pollTimer); rs.style.color = '#4f4'; rs.textContent = '●● both ready'; }
+        else if (afOk)     rs.textContent = '● A-Frame ready, waiting Babylon…';
+        else if (babOk)    rs.textContent = '● Babylon ready, waiting A-Frame…';
+      }, 500);
+    }
+
+    goBtn.addEventListener('click', load);
+    setTimeout(load, 200);
   </script>
 </body>
 </html>
