@@ -1,0 +1,23 @@
+{
+  "name": "babylonjs-editor-vrm-cast-plugin",
+  "version": "0.1.0",
+  "description": "VRM Cast panel for Babylon.js Editor — pick VRM models and VRMA animations",
+  "productName": "VRM Cast Plugin",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -p . --watch"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11",
+    "@types/node": "^22",
+    "@types/react": "18.2.47",
+    "@types/react-dom": "18.2.18",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "fs-extra": "11.2.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  }
+}
