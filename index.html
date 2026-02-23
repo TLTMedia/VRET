@@ -1,39 +1,18 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <title>VRMA Animations Index</title>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Babylon.js VRM Plugin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
-        body { font-family: sans-serif; background: #111; color: #eee; padding: 20px; }
-        a { color: #0cf; text-decoration: none; display: block; padding: 5px; border-bottom: 1px solid #222; }
-        a:hover { background: #222; }
-        h1 { border-bottom: 1px solid #333; padding-bottom: 10px; }
+      html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #111; }
     </style>
-</head>
-<body>
-    <h1>Available Animations</h1>
-    <div id="list">Loading...</div>
-
-    <script>
-        fetch('animations.json')
-            .then(response => response.json())
-            .then(data => {
-                const list = document.getElementById('list');
-                list.innerHTML = '';
-                
-                // Sort naturally
-                data.sort(new Intl.Collator('en', {numeric: true, sensitivity: 'base'}).compare);
-
-                data.forEach(item => {
-                    const a = document.createElement('a');
-                    a.href = `animate.html#${item.url}`;
-                    a.textContent = `${item.url} - ${item.description}`;
-                    list.appendChild(a);
-                });
-            })
-            .catch(err => {
-                document.getElementById('list').textContent = 'Error loading list.';
-                console.error(err);
-            });
-    </script>
-</body>
+    <!-- Babylon.js + VRM loader via CDN (ESM npm build incompatible with vrm-loader) -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+    <script src="https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js"></script>
+  </head>
+  <body>
+    <script type="module" src="./src/app.ts"></script>
+  </body>
 </html>

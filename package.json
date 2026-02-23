@@ -1,7 +1,20 @@
 {
+  "name": "babylon-vrm-plugin",
+  "version": "0.1.0",
+  "description": "Babylon.js plugin for VRM avatars and VRMA animations",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build --base=./",
+    "preview": "vite preview"
+  },
   "devDependencies": {
+    "@babylonjs/core": "^8.52.0",
+    "@babylonjs/inspector": "^8.52.0",
+    "@babylonjs/loaders": "^8.52.0",
     "pixelmatch": "^7.1.0",
     "pngjs": "^7.0.0",
-    "puppeteer": "^24.37.5"
+    "puppeteer": "^24.37.5",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
   }
 }

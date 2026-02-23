@@ -1,0 +1,17 @@
+{
+  "metadata": { "title": "Two Actors Test" },
+  "actors": [
+    { "id": "alice", "vrm": "models/AliciaSolid.vrm",
+      "startPosition": {"x": -1, "y": 0, "z": 0},
+      "startRotation": {"y": 0} },
+    { "id": "bob",   "vrm": "models/AliciaSolid.vrm",
+      "startPosition": {"x":  1, "y": 0, "z": 0},
+      "startRotation": {"y": 0} }
+  ],
+  "timeline": [
+    { "start": 0, "actor": "alice", "action": "animate",
+      "clip": "vrma/02_01.vrma", "loop": true },
+    { "start": 0, "actor": "bob",   "action": "animate",
+      "clip": "vrma/01_01.vrma", "loop": true }
+  ]
+}
