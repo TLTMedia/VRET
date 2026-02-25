@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>ARKit Face Driver — Test Subject</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+  <style>
+    html, body, #renderCanvas { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #222; }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+  <script type="module">
+    import { ARKitFaceDriver } from './arkit-face-driver.js';
+
+    const VRM_FILE = 'models/AIAN/AIAN_F_1_Casual_CLEANED.vrm';
+
+    window.faceReady = false;
+
+    // ── Load babylon-vrm-loader ──────────────────────────────────────────────
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+
+    // ── Scene ────────────────────────────────────────────────────────────────
+    const canvas = document.getElementById('renderCanvas');
+    const engine = new BABYLON.Engine(canvas, true);
+    engine.setHardwareScalingLevel(1);
+    const scene = new BABYLON.Scene(engine);
+
+    // Upper-body camera centred on face height — test clips to face region.
+    const camera = new BABYLON.ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 2 - 0.12, 1.5,
+      new BABYLON.Vector3(0, 1.55, 0), scene);
+    camera.lowerRadiusLimit = 0.3;
+    camera.upperRadiusLimit = 8;
+
+    new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
+    const dirLight = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-1, -2, -1), scene);
+    dirLight.intensity = 0.5;
+    const fillLight = new BABYLON.PointLight('fill', new BABYLON.Vector3(0, 1.6, -1), scene);
+    fillLight.intensity = 0.6;
+
+    // ── Load VRM ─────────────────────────────────────────────────────────────
+    await BABYLON.ImportMeshAsync(VRM_FILE, scene);
+    const vrmManager = scene.metadata?.vrmManagers?.[0];
+    if (!vrmManager) throw new Error('VRM manager not found');
+
+    // ── Instantiate driver ───────────────────────────────────────────────────
+    const driver = new ARKitFaceDriver(vrmManager, scene);
+
+    // ── Window API (Puppeteer hooks) ─────────────────────────────────────────
+    window.setShape = (name, value) => {
+      driver.set(name, value);
+      scene.render();
+    };
+
+    window.resetAll = () => {
+      driver.reset();
+      scene.render();
+    };
+
+    window.getShapeInfo = () => ARKitFaceDriver.MECHANISM;
+
+    // Expose head bone screen position so the test can compute an accurate face crop rect
+    window.getHeadScreenRect = () => {
+      const headBone = vrmManager.humanoidBone['head'];
+      if (!headBone) return null;
+      const worldPos = headBone.getAbsolutePosition
+        ? headBone.getAbsolutePosition()
+        : headBone.absolutePosition;
+      // Project world → screen
+      const projected = BABYLON.Vector3.Project(
+        worldPos,
+        BABYLON.Matrix.Identity(),
+        scene.getTransformMatrix(),
+        camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight())
+      );
+      // Return a rect centred on the projected head position; width/height in pixels
+      const cx = Math.round(projected.x);
+      const cy = Math.round(projected.y);
+      const hw = 60, hh = 100; // half-width, half-height of crop box
+      return { x: cx - hw, y: cy - hh, width: hw * 2, height: hh * 2, cx, cy };
+    };
+
+    window.faceReady = true;
+
+    // Minimal render loop (30 fps) — Puppeteer also triggers renders via RAF
+    let _last = 0;
+    engine.runRenderLoop(() => {
+      const now = performance.now();
+      if (now - _last >= 33) { _last = now; scene.render(); }
+    });
+    window.addEventListener('resize', () => engine.resize());
+
+  </script>
+</body>
+</html>
