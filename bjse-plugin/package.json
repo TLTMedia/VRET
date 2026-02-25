@@ -5,14 +5,15 @@
   "productName": "VRM Cast Plugin",
   "main": "build/index.js",
   "scripts": {
-    "build": "tsc -p .",
-    "watch": "tsc -p . --watch"
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch"
   },
   "devDependencies": {
     "@types/fs-extra": "^11",
     "@types/node": "^22",
     "@types/react": "18.2.47",
     "@types/react-dom": "18.2.18",
+    "esbuild": "^0.25.0",
     "typescript": "5.9.3"
   },
   "dependencies": {

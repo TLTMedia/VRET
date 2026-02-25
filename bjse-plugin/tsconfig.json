@@ -16,5 +16,13 @@
     "skipLibCheck": true
   },
   "exclude": ["node_modules", "build", "declaration"],
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*",
+    "../src/VrmModel.ts",
+    "../src/VrmLoader.ts",
+    "../src/VrmaLoader.ts",
+    "../src/VrmaPlayer.ts",
+    "../src/Actor.ts",
+    "../src/PlayController.ts"
+  ]
 }
