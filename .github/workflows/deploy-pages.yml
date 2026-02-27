@@ -1,0 +1,118 @@
+name: Deploy CDN to GitHub Pages
+
+on:
+  push:
+    branches: [main, babvrm, paul]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Stage CDN assets
+        run: |
+          mkdir -p _site/models/AIAN
+          mkdir -p _site/vrma
+          mkdir -p _site/js
+
+          # VRM models
+          # AliciaSolid + avatar for Playground CDN demos
+          cp models/AliciaSolid.vrm _site/models/ 2>/dev/null || echo "AliciaSolid.vrm not found"
+          cp models/avatar.vrm      _site/models/ 2>/dev/null || echo "avatar.vrm not found"
+          # AIAN_F_1_Casual_CLEANED.vrm — used by babvrm.html
+          cp "models/AIAN/AIAN_F_1_Casual_CLEANED.vrm" _site/models/AIAN/ 2>/dev/null || echo "AIAN model not found"
+
+          # All VRMA animation clips (referenced by animations.json)
+          if [ -d vrma ]; then
+            cp vrma/*.vrma _site/vrma/
+            echo "Copied $(ls _site/vrma/ | wc -l) vrma files"
+          fi
+
+          # animations.json — required by babvrm.html
+          cp animations.json _site/ 2>/dev/null || echo "animations.json not found"
+
+          # JS libraries
+          if [ -d js ]; then
+            cp -r js/. _site/js/
+          fi
+
+          # HTML demo pages from root
+          for f in *.html; do
+            [ -f "$f" ] && cp "$f" _site/
+          done
+
+          # index.html — landing page with links to demos and CDN asset list
+          cat > _site/index.html << 'INDEXEOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <title>VRE — Babylon.js VRM/VRMA CDN</title>
+            <style>
+              body { font-family: system-ui, sans-serif; max-width: 860px; margin: 2em auto; padding: 0 1em; line-height: 1.6; }
+              h1 { color: #1a1a2e; }
+              h2 { border-bottom: 1px solid #ddd; padding-bottom: .3em; }
+              a.demo { display: inline-block; margin: .4em .6em .4em 0; padding: .4em .9em;
+                       background: #0076ff; color: #fff; border-radius: 4px; text-decoration: none; }
+              a.demo:hover { background: #005acc; }
+              code { background: #f4f4f4; padding: .1em .4em; border-radius: 3px; font-size: .9em; }
+              .assets { font-size: .85em; color: #555; }
+            </style>
+          </head>
+          <body>
+            <h1>VRE — Babylon.js VRM/VRMA CDN</h1>
+
+            <h2>Live Demos</h2>
+            <a class="demo" href="babvrm.html">babvrm.html — VRM + VRMA player</a>
+
+            <h2>CDN Asset URLs</h2>
+            <p class="assets">Base: <code>https://sbutltmedia.github.io/VRE/</code></p>
+            <h3>VRM Models</h3>
+            <ul class="assets">
+              <li><code>models/AliciaSolid.vrm</code></li>
+              <li><code>models/avatar.vrm</code></li>
+              <li><code>models/AIAN/AIAN_F_1_Casual_CLEANED.vrm</code></li>
+            </ul>
+            <h3>VRMA Animations</h3>
+            <p class="assets">2500+ clips under <code>vrma/</code> — full list in
+              <a href="animations.json">animations.json</a>.<br>
+              Example: <code>vrma/40_11.vrma</code></p>
+          </body>
+          </html>
+          INDEXEOF
+
+          echo "--- Staged sizes ---"
+          du -sh _site/models _site/vrma _site/js 2>/dev/null || true
+          du -sh _site/
+          echo "--- File count ---"
+          find _site -type f | wc -l
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
