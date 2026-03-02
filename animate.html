@@ -99,6 +99,24 @@ const hashAnim = window.location.hash.substring(1); // remove #
 document.getElementById('current-anim').textContent = hashAnim || "No animation specified";
 
 
+// Component to visualize bone axes
+AFRAME.registerComponent('bone-marker', {
+    init: function() {
+        const bones = ['leftHand', 'rightHand', 'leftFoot', 'rightFoot'];
+        this.el.addEventListener('model-loaded', (e) => {
+            const vrm = e.detail.vrm;
+            if (!vrm) return;
+            bones.forEach(name => {
+                const node = vrm.humanoid.getNormalizedBoneNode(name);
+                if (node) {
+                    const helper = new THREE.AxesHelper(0.3);
+                    node.add(helper);
+                }
+            });
+        });
+    }
+});
+
 // Single Animation Player component
 AFRAME.registerComponent('anim-player', {
     init: function () {
@@ -110,14 +128,24 @@ AFRAME.registerComponent('anim-player', {
         this.el.addEventListener('model-loaded', (e) => {
             this.vrm = e.detail.vrm;
             this.mixer = this.el.components.vrm.mixer;
+            window._vrmComp = this;
             console.log('VRM loaded, starting animation');
 
-            if (hashAnim) {
+            if (hashAnim && hashAnim !== 'none') {
                 this.loadAnimation(hashAnim);
             } else {
-                console.warn('No animation hash provided');
+                console.warn('No animation hash provided or #none');
+                window.animationReady = true;
             }
         });
+    },
+
+    tick: function(t, dt) {
+        // Disable root motion for visual testing
+        if (this.vrm?.humanoid) {
+            const hips = this.vrm.humanoid.getNormalizedBoneNode('hips');
+            if (hips) hips.position.set(0, hips.position.y, 0);
+        }
     },
 
     loadAnimation: async function (animUrl) {
@@ -173,20 +201,45 @@ AFRAME.registerComponent('anim-player', {
 // Playwright hook: seek to time t (seconds) and return bone quaternions.
 window.getBoneQuats = function(t) {
     const comp = window._vrmComp;
-    if (!comp?.vrm || !comp?.mixer) return null;
-    comp.mixer.setTime(t);
+    if (!comp?.vrm) return null;
+
+    // Pause A-Frame loop for deterministic capture if not already paused
+    const sceneEl = document.querySelector('a-scene');
+    if (!sceneEl.paused) sceneEl.pause();
+    
+    if (comp.mixer) {
+        comp.mixer.setTime(t);
+    }
     comp.vrm.update(0);
+    
+    // Force a THREE.js render to ensure the visual state matches the bones we just set
+    if (sceneEl.renderer && sceneEl.camera) {
+        sceneEl.renderer.render(sceneEl.object3D, sceneEl.camera);
+    }
+
     const bones = ['hips','spine','chest','upperChest','neck','head',
         'leftShoulder','leftUpperArm','leftLowerArm','leftHand',
         'rightShoulder','rightUpperArm','rightLowerArm','rightHand',
         'leftUpperLeg','leftLowerLeg','leftFoot',
         'rightUpperLeg','rightLowerLeg','rightFoot'];
     const result = {};
+    const _v = new THREE.Vector3();
+    
+    // Diagnostic logging for specific bones once
+    if (!window._diagLogged) {
+        window._diagLogged = true;
+        console.log(`[DIAG-AF] Normalized bone rotations at t=${t}:`);
+    }
+
     for (const bone of bones) {
-        const node = comp.vrm.humanoid.getNormalizedBoneNode(bone);
-        if (node?.quaternion) {
-            const q = node.quaternion;
-            result[bone] = { x: +q.x.toFixed(4), y: +q.y.toFixed(4), z: +q.z.toFixed(4), w: +q.w.toFixed(4) };
+        const normNode = comp.vrm.humanoid.getNormalizedBoneNode(bone);
+        if (normNode) {
+            const q = normNode.quaternion;
+            normNode.getWorldPosition(_v);
+            result[bone] = {
+                q: { x: +q.x.toFixed(4), y: +q.y.toFixed(4), z: +q.z.toFixed(4), w: +q.w.toFixed(4) },
+                pos: { x: +_v.x.toFixed(4), y: +_v.y.toFixed(4), z: +_v.z.toFixed(4) }
+            };
         }
     }
     return result;
@@ -251,15 +304,7 @@ AFRAME.registerComponent('leg-fixer', {
 <a-scene>
     <a-sky color="#001a33"></a-sky>
 
-    <!-- Ground plane -->
-    <a-plane
-        position="0 0 0"
-        rotation="-90 0 0"
-        width="50"
-        height="50"
-        color="#003366"
-        shadow="receive: true">
-    </a-plane>
+    <!-- Ground plane removed for screenshot comparison -->
 
     <!-- VRM Avatar with animation player and leg fix -->
     <a-entity
@@ -267,8 +312,9 @@ AFRAME.registerComponent('leg-fixer', {
         vrm="src: ;"
         anim-player
         leg-fixer
-        position="0 0 -4"
-        rotation="0 180 0"
+        bone-marker
+        position="0 0 0"
+        rotation="0 0 0"
         shadow="cast: true; receive: false;">
     </a-entity>
 
@@ -277,8 +323,8 @@ AFRAME.registerComponent('leg-fixer', {
     <a-entity light="type: directional; intensity: 0.8; castShadow: true;" position="2 4 2"></a-entity>
 
     <!-- Camera -->
-    <a-entity position="0 1.6 1">
-        <a-camera></a-camera>
+    <a-entity position="0 1.1 2.5">
+        <a-camera position="0 0 0" look-controls-enabled="false" wasd-controls-enabled="false"></a-camera>
     </a-entity>
 </a-scene>
 

@@ -24,9 +24,10 @@
     <select id="vrmaSelect" style="max-width:300px"></select>
     <label>Model:</label>
     <select id="modelSelect">
-      <option value="models/AIAN/AIAN_F_1_Casual_CLEANED.vrm">AIAN F1</option>
-      <option value="models/White/White_M_1_Casual_CLEANED.vrm">White M1</option>
-      <option value="models/Hispanic/Hispanic_M_3_Casual_CLEANED.vrm">Hispanic M3</option>
+      <option value="models/Seed-san.vrm">Seed-san (VRM 1.0 · robot)</option>
+      <option value="models/sample.vrm">sample (VRM 0.x · humanoid)</option>
+      <option value="models/AIAN/AIAN_F_1_Casual_CLEANED.vrm">AIAN F1 (VRM 0.x)</option>
+      <option value="models/White/White_M_1_Casual_CLEANED.vrm">White M1 (VRM 0.x)</option>
     </select>
     <button id="goBtn">Load</button>
     <span id="readyState" style="color:#666">●● loading…</span>
@@ -78,7 +79,7 @@
       const vrma  = sel.value;
       const model = document.getElementById('modelSelect').value;
       document.getElementById('afFrame').src  = `animate.html?model=${model}#${vrma}`;
-      document.getElementById('babFrame').src = `babvrm.html#${vrma}`;
+      document.getElementById('babFrame').src = `babvrm.html?model=${model}#${vrma}`;
 
       let afOk = false, babOk = false;
       pollTimer = setInterval(() => {

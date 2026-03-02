@@ -2,284 +2,214 @@
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Babylon.js VRM+VRMA</title>
+  <title>Babylon.js VRM Player</title>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
   <style>
     html, body, #renderCanvas { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #111; }
-    #ui {
-      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
-      display: flex; flex-direction: column; align-items: center; gap: 8px;
-      font: 13px monospace; color: #fff; text-align: center; pointer-events: none;
-    }
-    #ui { display: none; }
-    #description { max-width: 480px; opacity: 0.9; text-shadow: 0 1px 3px #000; }
-    #btn {
-      pointer-events: all; padding: 6px 18px; background: rgba(255,255,255,0.15);
-      border: 1px solid rgba(255,255,255,0.4); color: #fff; border-radius: 4px;
-      cursor: pointer; font: 13px monospace;
-    }
-    #btn:hover { background: rgba(255,255,255,0.3); }
-    #status { opacity: 0.6; font-size: 11px; }
   </style>
 </head>
 <body>
   <canvas id="renderCanvas"></canvas>
-  <div id="ui">
-    <div id="description">Loading…</div>
-    <button id="btn">⟳ Random animation</button>
-    <div id="status"></div>
-  </div>
   <script type="module">
 
-    const VRM_FILE  = 'models/AIAN/AIAN_F_1_Casual_CLEANED.vrm';
-    // VRMA from hash (e.g. babvrm.html#vrma/13_29.vrma), else random
+    const params    = new URLSearchParams(location.search);
+    const VRM_FILE  = params.get('model') || 'models/Seed-san.vrm';
     const HASH_VRMA = location.hash.slice(1) || null;
 
     window.animationReady = false;
 
-    // ---------------------------------------------------------------------------
-    // VRM humanoid bone parent map (VRM spec / three-vrm VRMHumanBoneParentMap)
-    // ---------------------------------------------------------------------------
-    const BONE_PARENT = {
-      hips: null,
-      spine: 'hips', chest: 'spine', upperChest: 'chest',
-      neck: 'upperChest', head: 'neck',
-      leftEye: 'head', rightEye: 'head', jaw: 'head',
-      leftShoulder: 'upperChest', leftUpperArm: 'leftShoulder',
-      leftLowerArm: 'leftUpperArm', leftHand: 'leftLowerArm',
-      rightShoulder: 'upperChest', rightUpperArm: 'rightShoulder',
-      rightLowerArm: 'rightUpperArm', rightHand: 'rightLowerArm',
-      leftUpperLeg: 'hips', leftLowerLeg: 'leftUpperLeg',
-      leftFoot: 'leftLowerLeg', leftToes: 'leftFoot',
-      rightUpperLeg: 'hips', rightLowerLeg: 'rightUpperLeg',
-      rightFoot: 'rightLowerLeg', rightToes: 'rightFoot',
-      leftThumbMetacarpal:  'leftHand',  leftThumbProximal: 'leftThumbMetacarpal',  leftThumbDistal: 'leftThumbProximal',
-      leftIndexProximal:    'leftHand',  leftIndexIntermediate: 'leftIndexProximal',  leftIndexDistal: 'leftIndexIntermediate',
-      leftMiddleProximal:   'leftHand',  leftMiddleIntermediate: 'leftMiddleProximal', leftMiddleDistal: 'leftMiddleIntermediate',
-      leftRingProximal:     'leftHand',  leftRingIntermediate: 'leftRingProximal',    leftRingDistal: 'leftRingIntermediate',
-      leftLittleProximal:   'leftHand',  leftLittleIntermediate: 'leftLittleProximal', leftLittleDistal: 'leftLittleIntermediate',
-      rightThumbMetacarpal: 'rightHand', rightThumbProximal: 'rightThumbMetacarpal', rightThumbDistal: 'rightThumbProximal',
-      rightIndexProximal:   'rightHand', rightIndexIntermediate: 'rightIndexProximal', rightIndexDistal: 'rightIndexIntermediate',
-      rightMiddleProximal:  'rightHand', rightMiddleIntermediate: 'rightMiddleProximal', rightMiddleDistal: 'rightMiddleIntermediate',
-      rightRingProximal:    'rightHand', rightRingIntermediate: 'rightRingProximal',  rightRingDistal: 'rightRingIntermediate',
-      rightLittleProximal:  'rightHand', rightLittleIntermediate: 'rightLittleProximal', rightLittleDistal: 'rightLittleIntermediate',
-    };
+    // Load VRM 1.0 / VRMC_vrm_animation extension before the scene starts.
+    await new Promise(r => {
+      const s = document.createElement('script');
+      s.src = 'vrm1-loader.js';
+      s.onload = r;
+      document.head.appendChild(s);
+    });
 
-    // Compute world-space quaternion by walking a node's parent chain.
-    function worldQuatOf(node) {
-      const chain = [];
-      let cur = node;
-      while (cur) {
-        chain.unshift(cur.rotationQuaternion?.clone() ?? BABYLON.Quaternion.Identity());
-        cur = cur.parent;
-      }
-      return chain.reduce((acc, q) => acc.multiply(q), BABYLON.Quaternion.Identity());
-    }
-
-    // ---------------------------------------------------------------------------
-    // DOM refs
-    // ---------------------------------------------------------------------------
-    const descEl   = document.getElementById('description');
-    const statusEl = document.getElementById('status');
-    const btn      = document.getElementById('btn');
-
-    // ---------------------------------------------------------------------------
-    // Load VRM loader + animations list
-    // ---------------------------------------------------------------------------
-    const [, animations] = await Promise.all([
-      new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
-        s.onload = resolve; s.onerror = reject;
-        document.head.appendChild(s);
-      }),
-      fetch('animations.json').then(r => r.json()),
-    ]);
-
-    console.log(`[animations.json] ${animations.length} entries`);
-
-    // ---------------------------------------------------------------------------
-    // Scene setup
-    // ---------------------------------------------------------------------------
     const canvas = document.getElementById('renderCanvas');
     const engine = new BABYLON.Engine(canvas, true);
-    engine.setHardwareScalingLevel(1); // native resolution
     const scene  = new BABYLON.Scene(engine);
+    window.engine = engine;
+    window.scene  = scene;
 
-    // Camera matched to A-Frame reference: eye-level (~1.6 m), ~5 m in front of avatar.
-    // A-Frame: camera (0,1.6,1), avatar (0,0,-4) facing 180° → camera sees front of avatar.
-    // Babylon: __root__ 180°Y keeps avatar facing -Z; camera at alpha=-π/2 sits at -Z → sees front.
-    const camera = new BABYLON.ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 2 - 0.12, 5,
-      new BABYLON.Vector3(0, 0.9, 0), scene);
-    camera.attachControl(canvas, true);
-    camera.lowerRadiusLimit = 0.5;
-    camera.upperRadiusLimit = 15;
+    // LHS (default Babylon) — the glTF loader applies a 180°Y root rotation to
+    // __root__, so the VRM character faces -Z in world space.
+    // Match babplay.html: ArcRotateCamera at alpha=-π/2 sits on the -Z side looking in +Z.
+    const camera = new BABYLON.ArcRotateCamera(
+      'cam', -Math.PI / 2, Math.PI / 2 - 0.12, 3,
+      new BABYLON.Vector3(0, 0.9, 0), scene
+    );
 
+    scene.clearColor = BABYLON.Color3.FromHexString('#001a33').toColor4(1);
     new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
-    const dirLight = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-1, -2, -1), scene);
-    dirLight.intensity = 0.5;
 
-    // ---------------------------------------------------------------------------
-    // Load VRM (once)
-    // ---------------------------------------------------------------------------
-    descEl.textContent = 'Loading VRM…';
-    await BABYLON.ImportMeshAsync(VRM_FILE, scene);
-    const vrmManager = scene.metadata?.vrmManagers?.[0];
-    if (!vrmManager) throw new Error('VRM manager not found');
+    // Load VRM.
+    await BABYLON.SceneLoader.ImportMeshAsync(null, '', VRM_FILE, scene, undefined, '.glb');
 
-    // Precompute VRM hips height (constant across animations)
-    const vrmHipsBone = vrmManager.humanoidBone['hips'];
-    const vrmHipsY    = vrmHipsBone?.absolutePosition?.y
-                      ?? vrmHipsBone?.getAbsolutePosition?.().y
-                      ?? 1;
+    const vrmManager    = scene.metadata?.vrmManagers?.[0];
+    const humanoidBones = vrmManager?.humanoidBone?.nodeMap;
+    if (!humanoidBones) throw new Error('[BAB] No VRM humanoid bones found — is vrm1-loader.js loaded?');
+    console.log('[BAB] Humanoid bones:', Object.keys(humanoidBones).join(', '));
 
-    // ---------------------------------------------------------------------------
-    // playAnimation — loads a VRMA and remaps it onto the VRM
-    // ---------------------------------------------------------------------------
-    let currentGroup     = null;
-    let currentContainer = null;
-
-    async function playAnimation(entry) {
-      btn.disabled = true;
-      statusEl.textContent = 'loading…';
-      descEl.textContent   = entry.description;
-
-      // Stop & dispose previous animation group and its asset container
-      if (currentGroup) {
-        currentGroup.stop();
-        currentGroup.dispose();
-        currentGroup = null;
+    // Log the loader-applied root rotation for diagnostics.
+    // In LHS mode the loader applies 180°Y to __root__ — keep it; it is correct.
+    {
+      const hips = humanoidBones['hips'];
+      let root = hips;
+      while (root.parent &&
+             typeof root.parent.getClassName === 'function' &&
+             root.parent.getClassName() !== 'Scene') {
+        root = root.parent;
       }
-      if (currentContainer) {
-        currentContainer.dispose();
-        currentContainer = null;
-      }
-
-      // Remove previous vrmAnimationManagers (they accumulate on scene.metadata)
-      if (scene.metadata?.vrmAnimationManagers) {
-        scene.metadata.vrmAnimationManagers = [];
-      }
-
-      const assetContainer = await BABYLON.LoadAssetContainerAsync(entry.url, scene);
-      currentContainer = assetContainer;
-      const vrmAnimManager = scene.metadata?.vrmAnimationManagers?.[0];
-      const animGroup      = assetContainer.animationGroups[0];
-
-      if (!vrmAnimManager?.animationMap || !animGroup) {
-        statusEl.textContent = 'failed — no animation data';
-        btn.disabled = false;
-        return;
-      }
-
-      // -- Translation scale: VRM hips height / VRMA hips height --
-      let translationScale = 1;
-      const hipsIdx = [...vrmAnimManager.animationMap.entries()]
-        .find(([, name]) => name === 'hips')?.[0];
-      if (hipsIdx != null) {
-        const vrmaHipsY = animGroup.targetedAnimations[hipsIdx]?.target?.absolutePosition?.y ?? 0;
-        if (vrmaHipsY !== 0) translationScale = vrmHipsY / vrmaHipsY;
-      }
-
-      // -- Retargeted animation: apply VRM 0.x rest-pose correction --
-      // VRMA stores rotations in "normalized humanoid" space (identity rest-pose).
-      // VRM 0.x bones have non-identity T-pose quaternions stored in vrmRestQuats.
-      // Convert: q_applied = restQuat * q_vrma  (same as three-vrm normalization).
-      const remapped = new BABYLON.AnimationGroup('vrma-remapped');
-
-      animGroup.targetedAnimations.forEach((targeted, i) => {
-        const boneName = vrmAnimManager.animationMap.get(i);
-        const bone     = vrmManager.humanoidBone[boneName];
-        if (!bone) return;
-
-        const anim = targeted.animation.clone(`anim_${boneName}`);
-
-        if (anim.targetProperty === 'rotationQuaternion') {
-          // VRMA quaternions are in glTF right-handed canonical space.
-          // VRM bones in Babylon sit under a 180° Y "__root__" node making their effective
-          // space left-handed.  Conjugation by 180° Y maps (x,y,z,w) → (-x,y,-z,w).
-          // This is exactly the conversion three-vrm-animation applies internally.
-          anim.getKeys().forEach(kf => {
-            const q = kf.value;
-            kf.value = new BABYLON.Quaternion(-q.x, q.y, -q.z, q.w);
-          });
-        }
-
-        if (anim.targetProperty === 'position' && boneName === 'hips') {
-          // VRMA positions are in glTF right-handed space (loader does NOT convert keyframes).
-          // VRM hips sits under __root__ (180°Y) which maps local(x,y,z) → world(-x,y,-z).
-          // Pre-negate X and Z so after __root__ the world direction is correct:
-          //   glTF forward = -Z  →  local +Z  →  world -Z  (toward camera at -Z) ✓
-          anim.getKeys().forEach(kf => {
-            const v = kf.value.scale(translationScale);
-            kf.value = new BABYLON.Vector3(-v.x, v.y, -v.z);
-          });
-        }
-
-        remapped.addTargetedAnimation(anim, bone);
-      });
-
-      remapped.start(true, 1.0, remapped.from, remapped.to, false);
-      remapped.goToFrame(remapped.from); // apply frame 0 immediately — avoids 1-frame T-pose flash
-      scene.render();
-      currentGroup = remapped;
-
-      // Expose for Playwright sampling
-      window.scene        = scene;
-      window.remappedGroup = remapped;
-      window.animationReady = true;
-
-      statusEl.textContent = entry.url;
-      btn.disabled = false;
-      console.log('[Done]', entry.url, '— tracks:', remapped.targetedAnimations.length);
+      const r = root.rotationQuaternion;
+      console.log(`[BAB] VRM root "${root.name}" loader rotation: `
+        + `(${r?.x?.toFixed(3)}, ${r?.y?.toFixed(3)}, ${r?.z?.toFixed(3)}, ${r?.w?.toFixed(3)})`);
     }
 
-    // Playwright hook: seek both engines to the same timestamp and read bone quats.
-    // Returns { boneName: {x,y,z,w} } for all mapped humanoid bones.
-    window.getBoneQuats = function(t) {
-      if (!window.remappedGroup || !window.scene) return null;
-      const fps = window.remappedGroup.targetedAnimations[0]?.animation?.framePerSecond ?? 60;
-      window.remappedGroup.goToFrame(t * fps);
-      window.scene.render();
-      const mgr = window.scene.metadata?.vrmManagers?.[0];
-      if (!mgr) return null;
-      const result = {};
-      const nm = mgr.humanoidBone?.nodeMap ?? {};
-      for (const [name, bone] of Object.entries(nm)) {
-        const q = bone?.rotationQuaternion;
-        if (q) result[name] = { x: +q.x.toFixed(4), y: +q.y.toFixed(4), z: +q.z.toFixed(4), w: +q.w.toFixed(4) };
+    // Force one render so bone absolute positions are computed before we read them.
+    scene.render();
+
+    // Zero out hips X/Z translation every frame (keep Y for vertical bob).
+    // Matches what animate.html does: hips.position.set(0, hips.position.y, 0)
+    // Also force skeleton matrix recompute so TransformNode animation propagates to mesh skinning.
+    // (_markAsDirty is the correct method name in Babylon v8.53 CDN build.)
+    scene.onBeforeRenderObservable.add(() => {
+      const hips = humanoidBones['hips'];
+      if (hips) {
+        hips.position.x = 0;
+        hips.position.z = 0;
       }
-      return result;
+      for (const s of scene.skeletons) if (s?._markAsDirty) s._markAsDirty();
+    });
+
+    // ── Animation loader ──────────────────────────────────────────────────────
+    async function playAnimation(url) {
+      try {
+        if (!url) return;
+
+        const ac = await BABYLON.SceneLoader.LoadAssetContainerAsync(
+          '', url, scene, undefined, '.glb'
+        );
+        const animGroup = ac.animationGroups[0];
+        if (!animGroup) { console.warn('[BAB] No animation group in VRMA'); return; }
+
+        // VRM1AnimationExtension writes to scene.metadata.vrmAnimationManagers
+        // (the global extension fires even for LoadAssetContainerAsync).
+        // Use the most recently pushed entry to get this VRMA's maps.
+        const mgrs    = scene.metadata?.vrmAnimationManagers ?? [];
+        const vrmAnim = mgrs[mgrs.length - 1];
+        const animMap = vrmAnim?.animationMap; // vrmaNodeIndex → boneName
+        const nameMap = vrmAnim?.nameMap;      // vrmaNodeName  → boneName
+        console.log('[BAB] animMap size:', animMap?.size, '  nameMap size:', nameMap?.size);
+
+        // Compute hips height scale: model hips Y / first-keyframe hips Y in VRMA.
+        let hipsScaleY = 1;
+        {
+          const modelHipsY = humanoidBones['hips']?.getAbsolutePosition()?.y ?? 1;
+          const hipsTa = animGroup.targetedAnimations.find(ta => {
+            const idx = ta.target.metadata?.gltf?.index ?? ta.target._gltfEntity?.index;
+            const nm  = animMap?.get(idx) ?? nameMap?.get(ta.target.name);
+            return nm === 'hips' &&
+              (ta.animation.targetProperty === 'position' ||
+               ta.animation.targetProperty === 'translation');
+          });
+          const vrmaHipsY = hipsTa?.animation?.getKeys()?.[0]?.value?.y;
+          if (vrmaHipsY && Math.abs(vrmaHipsY) > 1e-4) {
+            hipsScaleY = modelHipsY / vrmaHipsY;
+            console.log('[BAB] hips scale:', hipsScaleY.toFixed(4),
+                        '  (modelY:', modelHipsY.toFixed(4), '/ vrmaY:', vrmaHipsY.toFixed(4) + ')');
+          }
+        }
+
+        const remapped = new BABYLON.AnimationGroup('vrma-retargeted', scene);
+        let mapped = 0;
+
+        animGroup.targetedAnimations.forEach(targeted => {
+          // Resolve VRMA node → humanoid bone name via index then name fallback.
+          const vrmaIdx  = targeted.target.metadata?.gltf?.index ??
+                           targeted.target._gltfEntity?.index;
+          const boneName = animMap?.get(vrmaIdx) ?? nameMap?.get(targeted.target.name);
+          const boneNode = humanoidBones?.[boneName];
+          if (!boneNode) return;
+
+          const anim = targeted.animation.clone();
+
+          if (anim.dataType === BABYLON.Animation.ANIMATIONTYPE_QUATERNION) {
+            // VRMA quaternions are in glTF RHS space.  The glTF loader applies a
+            // 180°Y rotation to __root__ (LHS mode).  To match this root correction
+            // we conjugate by 180°Y: (x,y,z,w) → (-x,y,-z,w).
+            const keys = anim.getKeys();
+            keys.forEach(kf => {
+              kf.value = new BABYLON.Quaternion(
+                -kf.value.x, kf.value.y, -kf.value.z, kf.value.w
+              );
+            });
+            anim.setKeys(keys);
+          } else if (boneName === 'hips' &&
+              (anim.targetProperty === 'position' ||
+               anim.targetProperty === 'translation')) {
+            // Scale hips height to match this model and negate X/Z to account for
+            // the 180°Y root rotation (local +X/-Z becomes world -X/+Z).
+            const keys = anim.getKeys();
+            keys.forEach(kf => {
+              kf.value = new BABYLON.Vector3(
+                -kf.value.x * hipsScaleY,
+                 kf.value.y * hipsScaleY,
+                -kf.value.z * hipsScaleY
+              );
+            });
+            anim.setKeys(keys);
+          }
+
+          remapped.addTargetedAnimation(anim, boneNode);
+          mapped++;
+        });
+
+        remapped.start(true);
+        window.remappedGroup = remapped;
+        console.log('[BAB] Animation started —', mapped, 'channels retargeted');
+
+      } catch (e) {
+        console.error('[BAB] playAnimation error:', e);
+      } finally {
+        window.animationReady = true;
+      }
+    }
+
+    if (HASH_VRMA) await playAnimation(HASH_VRMA);
+    else window.animationReady = true;
+
+    // ── Bone-quaternion export for Puppeteer tests ────────────────────────────
+    // Returns { boneName: { q:{x,y,z,w}, pos:{x,y,z} } } for all humanoid bones.
+    // Quaternions are raw Babylon local-bone values (XZ-negation applied above).
+    // The test harness checks dot(BAB, conj180Y(AF)) ≈ 1.
+    window.getBoneQuats = (t) => {
+      if (window.remappedGroup) {
+        const fps = window.remappedGroup.targetedAnimations[0]
+                      ?.animation?.framePerSecond ?? 60;
+        window.remappedGroup.pause();
+        window.remappedGroup.goToFrame(t * fps);
+      }
+      for (const s of scene.skeletons) if (s?._markAsDirty) s._markAsDirty();
+      scene.render();
+      const out = {};
+      Object.keys(humanoidBones).forEach(name => {
+        const node = humanoidBones[name];
+        if (!node) return;
+        const rq = node.rotationQuaternion ?? BABYLON.Quaternion.Identity();
+        const wp = node.getAbsolutePosition();
+        out[name] = {
+          q:   { x: +rq.x.toFixed(4), y: +rq.y.toFixed(4),
+                 z: +rq.z.toFixed(4), w: +rq.w.toFixed(4) },
+          pos: { x: +wp.x.toFixed(4), y: +wp.y.toFixed(4), z: +wp.z.toFixed(4) },
+        };
+      });
+      return out;
     };
 
-    // ---------------------------------------------------------------------------
-    // Random picker
-    // ---------------------------------------------------------------------------
-    let lastIdx = -1;
-    function pickRandom() {
-      let idx;
-      do { idx = Math.floor(Math.random() * animations.length); } while (idx === lastIdx);
-      lastIdx = idx;
-      return animations[idx];
-    }
-
-    btn.addEventListener('click', () => playAnimation(pickRandom()));
-
-    // If a specific VRMA was given via hash, use it; otherwise pick random
-    const firstEntry = HASH_VRMA
-      ? (animations.find(a => a.url === HASH_VRMA) ?? { url: HASH_VRMA, description: HASH_VRMA })
-      : pickRandom();
-    await playAnimation(firstEntry);
-
-    // Cap render loop to ~30 fps to reduce GPU load when viewed alongside A-Frame.
-    let _lastRender = 0;
-    engine.runRenderLoop(() => {
-      const now = performance.now();
-      if (now - _lastRender >= 33) { _lastRender = now; scene.render(); }
-    });
-    window.addEventListener('resize', () => engine.resize());
-
+    engine.runRenderLoop(() => { scene.render(); });
   </script>
 </body>
 </html>
