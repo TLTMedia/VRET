@@ -1,0 +1,220 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>VRM 1.x retargeting diagnostic</title>
+  <script src="https://preview.babylonjs.com/babylon.js"></script>
+  <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+  <style>
+    html,body { margin:0; background:#111; font:13px monospace; color:#eee; }
+    #layout { display:flex; height:100vh; }
+    .panel { flex:1; position:relative; border-right:1px solid #333; }
+    canvas { width:100%; height:100%; display:block; }
+    .label {
+      position:absolute; top:8px; left:0; right:0; text-align:center;
+      font:13px/1.5 monospace; color:#fff; pointer-events:none;
+      text-shadow:0 1px 4px #000;
+    }
+    .label .tag { display:inline-block; padding:3px 10px; border-radius:3px; font-size:12px; margin-top:4px; }
+    .broken  { background:rgba(200,40,40,.8); }
+    .testing { background:rgba(30,100,200,.8); }
+    #status { position:fixed; bottom:8px; left:0; right:0; text-align:center;
+              font:11px monospace; color:#aaa; pointer-events:none; }
+  </style>
+</head>
+<body>
+<div id="layout">
+  <div class="panel" id="left-panel">
+    <canvas id="c0"></canvas>
+    <div class="label">
+      VRM 1.x model<br>
+      <span class="tag broken">0.x retargeting — REFERENCE (broken)</span><br>
+      <span style="font-size:11px;color:#f88">(-qx, qy, -qz, qw) + negate X/Z hips</span>
+    </div>
+  </div>
+  <div class="panel" id="right-panel">
+    <canvas id="c1"></canvas>
+    <div class="label">
+      VRM 1.x model<br>
+      <span class="tag testing">AnimatorAvatar — Babylon 9.0 preview</span><br>
+      <span style="font-size:11px;color:#8cf">retargetAnimationGroup + mapNodeNames</span>
+    </div>
+  </div>
+</div>
+<div id="status">Loading…</div>
+
+<script type="module">
+  // ---------------------------------------------------------------------------
+  // Monkey-patch: AnimatorAvatar's getChildMeshes predicate calls getTotalVertices
+  // on ALL descendants including VRM TransformNode bones (which lack this method).
+  // Returning 0 causes TransformNodes to be treated as zero-vertex and filtered out.
+  // ---------------------------------------------------------------------------
+  BABYLON.TransformNode.prototype.getTotalVertices ??= function() { return 0; };
+
+  // Our batch-converted VRM 1.0 model + local VRMA
+  const VRM_URL  = "models/AIAN/AIAN_F_1_Casual.vrm";
+  const VRMA_URL = "vrma/40_11.vrma";
+
+  const statusEl = document.getElementById('status');
+  function setStatus(msg) { statusEl.textContent = msg; }
+
+  // Load the VRM loader script
+  await new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
+    s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+
+  // ------------------------------------------------------------------
+  // Helper: build a scene on a given canvas
+  // ------------------------------------------------------------------
+  function makeScene(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    const engine = new BABYLON.Engine(canvas, true);
+    const scene  = new BABYLON.Scene(engine);
+    const cam = new BABYLON.ArcRotateCamera('cam', Math.PI/2, Math.PI/2 - 0.12, 5,
+      new BABYLON.Vector3(0,0.9,0), scene);
+    cam.attachControl(canvas, true);
+    cam.lowerRadiusLimit = 0.5;
+    cam.upperRadiusLimit = 15;
+    new BABYLON.HemisphericLight('h', new BABYLON.Vector3(0,1,0), scene);
+    const d = new BABYLON.DirectionalLight('d', new BABYLON.Vector3(-1,-2,-1), scene);
+    d.intensity = 0.6;
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener('resize', () => engine.resize());
+    return scene;
+  }
+
+  // ------------------------------------------------------------------
+  // Left panel: manual 0.x retargeting (broken for VRM 1.0, kept as reference)
+  // ------------------------------------------------------------------
+  async function loadVrm0x(canvasId) {
+    const scene = makeScene(canvasId);
+    if (scene.metadata) scene.metadata.vrmManagers = [];
+
+    await BABYLON.ImportMeshAsync(VRM_URL, scene);
+    const vrmManager = scene.metadata?.vrmManagers?.[0];
+    if (!vrmManager) throw new Error('VRM manager not found in ' + canvasId);
+
+    const vrmHipsBone = vrmManager.humanoidBone['hips'];
+    const vrmHipsY    = vrmHipsBone?.absolutePosition?.y
+                      ?? vrmHipsBone?.getAbsolutePosition?.().y ?? 1;
+
+    if (scene.metadata?.vrmAnimationManagers) scene.metadata.vrmAnimationManagers = [];
+    const container      = await BABYLON.LoadAssetContainerAsync(VRMA_URL, scene);
+    const vrmAnimManager = scene.metadata?.vrmAnimationManagers?.[0];
+    const animGroup      = container.animationGroups[0];
+    if (!vrmAnimManager?.animationMap || !animGroup) throw new Error('No VRMA in ' + canvasId);
+
+    let translationScale = 1;
+    const hipsEntry = [...vrmAnimManager.animationMap.entries()].find(([,n]) => n === 'hips');
+    if (hipsEntry) {
+      const vrmaHipsY = animGroup.targetedAnimations[hipsEntry[0]]?.target?.absolutePosition?.y ?? 0;
+      if (vrmaHipsY !== 0) translationScale = vrmHipsY / vrmaHipsY;
+    }
+
+    // NOTE: pass scene explicitly so the group is registered in the right scene
+    const remapped = new BABYLON.AnimationGroup('vrma-' + canvasId, scene);
+
+    animGroup.targetedAnimations.forEach((targeted, i) => {
+      const boneName = vrmAnimManager.animationMap.get(i);
+      const bone     = vrmManager.humanoidBone[boneName];
+      if (!bone) return;
+      const anim = targeted.animation.clone('anim_' + boneName);
+      if (anim.targetProperty === 'rotationQuaternion') {
+        anim.getKeys().forEach(kf => {
+          const q = kf.value;
+          kf.value = new BABYLON.Quaternion(-q.x, q.y, -q.z, q.w);
+        });
+      }
+      if (anim.targetProperty === 'position' && boneName === 'hips') {
+        anim.getKeys().forEach(kf => {
+          const v = kf.value.scale(translationScale);
+          kf.value = new BABYLON.Vector3(-v.x, v.y, -v.z);
+        });
+      }
+      remapped.addTargetedAnimation(anim, bone);
+    });
+
+    remapped.start(true, 1.0, remapped.from, remapped.to, false);
+    remapped.goToFrame(remapped.from);
+    scene.render();
+    console.log('[0.x] tracks:', remapped.targetedAnimations.length, 'translationScale:', translationScale.toFixed(3));
+    return scene;
+  }
+
+  // ------------------------------------------------------------------
+  // Right panel: AnimatorAvatar (Babylon 9.0) retargeting
+  // ------------------------------------------------------------------
+  async function loadVrmAvatar(canvasId) {
+    const scene = makeScene(canvasId);
+    if (scene.metadata) scene.metadata.vrmManagers = [];
+
+    const importResult = await BABYLON.ImportMeshAsync(VRM_URL, scene);
+    const vrmManager = scene.metadata?.vrmManagers?.[0];
+    if (!vrmManager) throw new Error('VRM manager not found in ' + canvasId);
+
+    const vrmHipsBone     = vrmManager.humanoidBone['hips'];
+    const vrmLeftFootBone = vrmManager.humanoidBone['leftFoot'];
+
+    // Find __root__ mesh for AnimatorAvatar (root of scene hierarchy)
+    const rootMesh = scene.rootNodes?.find(n => n.name === '__root__')
+                  ?? importResult.meshes?.[0];
+    if (!rootMesh) throw new Error('No root mesh for AnimatorAvatar');
+
+    // Create AnimatorAvatar (monkey-patch above makes this safe with VRM TransformNode bones)
+    const vrmAvatar = new BABYLON.AnimatorAvatar('vrm-avatar-' + canvasId, rootMesh);
+    console.log('[avatar] AnimatorAvatar created, rootMesh:', rootMesh.name);
+
+    if (scene.metadata?.vrmAnimationManagers) scene.metadata.vrmAnimationManagers = [];
+    const container      = await BABYLON.LoadAssetContainerAsync(VRMA_URL, scene);
+    const vrmAnimManager = scene.metadata?.vrmAnimationManagers?.[0];
+    const animGroup      = container.animationGroups[0];
+    if (!vrmAnimManager?.animationMap || !animGroup) throw new Error('No VRMA in ' + canvasId);
+
+    // Build name map: VRMA source target name → VRM skeleton bone name
+    const mapNodeNames = new Map();
+    animGroup.targetedAnimations.forEach((targeted, i) => {
+      const boneName = vrmAnimManager.animationMap.get(i);
+      const bone = vrmManager.humanoidBone[boneName];
+      if (bone && targeted.target?.name) {
+        mapNodeNames.set(targeted.target.name, bone.name);
+      }
+    });
+    console.log('[avatar] mapNodeNames:', mapNodeNames.size, 'entries, sample:',
+      [...mapNodeNames.entries()].slice(0, 3));
+
+    const retargeted = vrmAvatar.retargetAnimationGroup(animGroup, {
+      animationGroupName:      'vrma-avatar-' + canvasId,
+      fixRootPosition:         true,
+      rootNodeName:            vrmHipsBone.name,
+      groundReferenceNodeName: vrmLeftFootBone?.name,
+      mapNodeNames,
+    });
+
+    retargeted.start(true, 1.0, retargeted.from, retargeted.to, false);
+    retargeted.goToFrame(retargeted.from);
+    scene.render();
+    console.log('[avatar] tracks:', retargeted.targetedAnimations.length,
+      'from:', retargeted.from, 'to:', retargeted.to);
+    return scene;
+  }
+
+  // ------------------------------------------------------------------
+  // Run both panels
+  // ------------------------------------------------------------------
+  setStatus('Loading VRM 1.x model + VRMA into both panels…');
+  try {
+    await Promise.all([
+      loadVrm0x('c0'),
+      loadVrmAvatar('c1'),
+    ]);
+    setStatus('Both panels loaded — left: broken 0.x retargeting | right: AnimatorAvatar (Babylon 9.0)');
+  } catch(e) {
+    setStatus('Error: ' + e.message);
+    console.error(e);
+  }
+</script>
+</body>
+</html>
