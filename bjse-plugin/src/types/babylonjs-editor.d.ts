@@ -28,12 +28,19 @@ declare module "babylonjs-editor" {
     canvas: HTMLCanvasElement;
   }
 
+  export interface EditorGraph {
+    /** Re-scans scene.rootNodes and rebuilds the graph tree. Returns a Promise. */
+    refresh(): Promise<void>;
+    setSelectedNode(node: any): void;
+  }
+
   export interface EditorLayout {
     addLayoutTab(component: ReactNode, options: IEditorLayoutTabOptions): void;
     removeLayoutTab(id: string): void;
     selectTab(id: string): void;
     console: EditorConsole;
     preview: EditorPreview;
+    graph: EditorGraph;
   }
 
   export interface EditorState {
