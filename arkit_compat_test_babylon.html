@@ -1,0 +1,354 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Babylon.js VRM 1.0 ARKit Test</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <script src="https://preview.babylonjs.com/babylon.js"></script>
+  <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+  <style>
+    html, body, #renderCanvas { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #111; }
+    #info {
+      position: fixed; top: 20px; left: 20px;
+      color: white; font-family: monospace;
+      background: rgba(0,0,0,0.8); padding: 15px; border-radius: 5px;
+      pointer-events: none; font-size: 1.2em; z-index: 100;
+    }
+    .highlight { color: #00ff00; font-weight: bold; }
+    .category  { color: #ffaa00; font-weight: bold; }
+    #controls {
+      position: fixed; bottom: 20px; left: 20px;
+      background: rgba(0,0,0,0.8); padding: 15px; border-radius: 5px;
+      z-index: 100; color: white; font-family: monospace;
+    }
+    select {
+      background: #333; color: white; border: 1px solid #666;
+      padding: 5px; font-family: monospace; margin: 5px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+
+  <div id="info">
+    <div>VRM 1.0 Expression Test — Babylon.js</div>
+    <div id="status">Loading model…</div>
+    <div id="current-shape" class="highlight"></div>
+    <div id="shape-count"></div>
+  </div>
+
+  <div id="controls">
+    <div>Filter:
+      <select id="modeSelect">
+        <option value="all">All Expressions</option>
+        <option value="arkit">ARKit Only</option>
+        <option value="vrm0">VRM 0.x Basic</option>
+      </select>
+    </div>
+    <div>Speed:
+      <select id="speedSelect">
+        <option value="2.0">Slow</option>
+        <option value="1.5" selected>Normal</option>
+        <option value="1.0">Fast</option>
+        <option value="0.5">Very Fast</option>
+      </select>
+    </div>
+  </div>
+
+  <script type="module">
+    // Monkey-patch: AnimatorAvatar compatibility
+    BABYLON.TransformNode.prototype.getTotalVertices ??= function() { return 0; };
+
+    const VRM_FILE = 'models/AIAN/AIAN_F_1_Busi.vrm';
+
+    const ARKIT_NAMES = [
+      'eyeBlinkLeft','eyeBlinkRight','eyeWideLeft','eyeWideRight','eyeSquintLeft','eyeSquintRight',
+      'jawOpen','jawForward','jawLeft','jawRight',
+      'mouthClose','mouthFunnel','mouthPucker','mouthLeft','mouthRight',
+      'mouthSmileLeft','mouthSmileRight','mouthFrownLeft','mouthFrownRight',
+      'mouthDimpleLeft','mouthDimpleRight','mouthStretchLeft','mouthStretchRight',
+      'mouthUpperUpLeft','mouthUpperUpRight','mouthLowerDownLeft','mouthLowerDownRight',
+      'mouthPressLeft','mouthPressRight',
+      'browDownLeft','browDownRight','browOuterUpLeft','browOuterUpRight','browInnerUp',
+      'cheekPuff','noseSneerLeft','noseSneerRight'
+    ];
+
+    const VRM0_NAMES = ['aa','ih','ou','ee','oh','blink','happy','angry','sad','relaxed','neutral'];
+
+    // ---------------------------------------------------------------------------
+    // DOM
+    // ---------------------------------------------------------------------------
+    const statusEl       = document.getElementById('status');
+    const currentShapeEl = document.getElementById('current-shape');
+    const shapeCountEl   = document.getElementById('shape-count');
+    const modeSelect     = document.getElementById('modeSelect');
+    const speedSelect    = document.getElementById('speedSelect');
+
+    // ---------------------------------------------------------------------------
+    // Load VRM loader
+    // ---------------------------------------------------------------------------
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+
+    // ---------------------------------------------------------------------------
+    // Scene setup
+    // ---------------------------------------------------------------------------
+    const canvas = document.getElementById('renderCanvas');
+    const engine = new BABYLON.Engine(canvas, true);
+    const scene = new BABYLON.Scene(engine);
+
+    // Camera focused on face
+    const camera = new BABYLON.ArcRotateCamera('cam', Math.PI / 2, Math.PI / 2 - 0.12, 1.2,
+      new BABYLON.Vector3(0, 1.55, 0), scene);
+    camera.attachControl(canvas, true);
+
+    new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
+    const dirLight = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-1, -2, -1), scene);
+    dirLight.intensity = 0.5;
+    const fillLight = new BABYLON.PointLight('fill', new BABYLON.Vector3(0, 1.6, -1), scene);
+    fillLight.intensity = 0.6;
+
+    // ---------------------------------------------------------------------------
+    // Load VRM
+    // ---------------------------------------------------------------------------
+    statusEl.textContent = 'Loading VRM 1.0…';
+    try {
+        await BABYLON.ImportMeshAsync(VRM_FILE, scene);
+    } catch (e) {
+        statusEl.textContent = 'ERROR loading model: ' + e.message;
+        throw e;
+    }
+    
+    const vrmManager = scene.metadata?.vrmManagers?.[0];
+    if (!vrmManager) {
+        statusEl.textContent = 'ERROR: VRM manager not found';
+        throw new Error('VRM manager not found');
+    }
+
+    console.log('[Test] vrmManager:', vrmManager);
+    
+    // VRM 1.0 Expression Manager discovery
+    let expressionManager = vrmManager.expressionManager;
+    if (!expressionManager && vrmManager.ext10) {
+        expressionManager = vrmManager.ext10.expressionManager;
+    }
+    
+    if (!expressionManager) {
+        console.warn('[Test] Standard expression manager not found. Scanning metadata...');
+        // If the loader failed to initialize the manager, we can sometimes find it in ext10
+        if (vrmManager.ext10) {
+            console.log('[Test] ext10 keys:', Object.keys(vrmManager.ext10));
+        }
+    }
+
+    let allExpressions = [];
+    if (expressionManager && typeof expressionManager.getExpressionList === 'function') {
+        allExpressions = expressionManager.getExpressionList();
+    } else {
+        // Fallback 1: ext10 IS the VRM 1.0 data directly (no .vrm sub-property).
+        // ext10.expressions.preset has VRM 1.0 preset names (aa, blink, blinkLeft…)
+        // ext10.expressions.custom has ARKit-named custom expressions.
+        const vrm1 = vrmManager.ext10;
+        if (vrm1 && vrm1.expressions) {
+            if (vrm1.expressions.preset) allExpressions.push(...Object.keys(vrm1.expressions.preset));
+            if (vrm1.expressions.custom) allExpressions.push(...Object.keys(vrm1.expressions.custom));
+            console.log('[Test] Built expression list from ext10.expressions:', allExpressions.length);
+        }
+
+        // Supplement: some ARKit names (e.g. eyeBlinkLeft/Right) are stored under
+        // different VRM 1.0 preset keys (blinkLeft/Right) but the mesh still has
+        // a morph target with the original ARKit name. Add any ARKIT_NAMES or
+        // VRM0_NAMES morph targets not already in the list.
+        const nameSet = new Set(allExpressions);
+        for (const mesh of scene.meshes) {
+            const mgr = mesh.morphTargetManager;
+            if (!mgr) continue;
+            for (let i = 0; i < mgr.numTargets; i++) {
+                const name = mgr.getTarget(i).name;
+                if (name && !nameSet.has(name) &&
+                    (ARKIT_NAMES.includes(name) || VRM0_NAMES.includes(name))) {
+                    allExpressions.push(name);
+                    nameSet.add(name);
+                }
+            }
+        }
+    }
+
+    if (allExpressions.length === 0) {
+        // Last resort: full morph target scan (picks up all 100+ internal shapes).
+        const seen = new Set();
+        for (const mesh of scene.meshes) {
+            const mgr = mesh.morphTargetManager;
+            if (!mgr) continue;
+            for (let i = 0; i < mgr.numTargets; i++) {
+                const name = mgr.getTarget(i).name;
+                if (name && !seen.has(name)) { seen.add(name); allExpressions.push(name); }
+            }
+        }
+        console.log('[Test] Last resort: full morph target scan');
+    }
+
+    if (allExpressions.length === 0) {
+        statusEl.textContent = 'ERROR: No expressions found';
+        throw new Error('No expressions found');
+    }
+
+    console.log('[Test] Available expressions:', allExpressions);
+    shapeCountEl.textContent = `Total expressions in VRM: ${allExpressions.length}`;
+    statusEl.textContent = 'Ready. Cycling expressions…';
+
+    // ---------------------------------------------------------------------------
+    // Build morph bind map from ext10.expressions for index-based setting.
+    // The loader stores morphTargetBinds as {node: gltfNodeIdx, index: morphIdx}.
+    // vrmManager.transformNodeCache maps gltfNodeIdx → TransformNode (Babylon mesh).
+    // ---------------------------------------------------------------------------
+    const morphBindMap = new Map(); // expression name → [{target, weight}]
+    if (vrmManager.ext10?.expressions) {
+        const buildBinds = (expr) => {
+            const binds = expr?.morphTargetBinds;
+            if (!binds?.length) return [];
+            return binds.flatMap(b => {
+                const tn = vrmManager.transformNodeCache?.[b.node];
+                if (!tn) return [];
+                const mesh = scene.meshes.find(m => m.name === tn.name && m.morphTargetManager);
+                if (!mesh) return [];
+                const target = mesh.morphTargetManager.getTarget(b.index);
+                return target ? [{ target, weight: b.weight }] : [];
+            });
+        };
+        for (const [key, expr] of Object.entries(vrmManager.ext10.expressions.preset ?? {})) {
+            const binds = buildBinds(expr);
+            if (binds.length) morphBindMap.set(key, binds);
+        }
+        for (const [key, expr] of Object.entries(vrmManager.ext10.expressions.custom ?? {})) {
+            const binds = buildBinds(expr);
+            if (binds.length) morphBindMap.set(key, binds);
+        }
+        console.log('[Test] Morph bind map:', morphBindMap.size, 'entries');
+    }
+
+    // ---------------------------------------------------------------------------
+    // Teeth mesh — jaw-related ARKit shapes need a companion shape on h_TeethDown.
+    // The VRM expression binds only cover the face mesh; teeth are a separate mesh
+    // with different morph target names (no h_teeth. prefix in VRM 1.0 export).
+    // ---------------------------------------------------------------------------
+    const TEETH_SHAPE_MAP = {
+        // Jaw openers
+        'jawOpen':     't_MouthOpen_h',
+        'mouthFunnel': 't_Shout_h',
+        'mouthClose':  't_MPB_h',
+        'jawLeft':     't_Ljaw_h',
+        'jawRight':    't_Rjaw_h',
+        'jawForward':  't_JawFront_h',
+        // VRM0 visemes
+        'aa':          't_AE_AA_h',
+        'ih':          't_TD_I_h',
+        'ou':          't_UH_OO_h',
+        'oh':          't_AO_a_h',
+        'ee':          't_Ax_E_h',
+    };
+    const teethMesh = scene.meshes.find(m => m.name === 'h_TeethDown');
+
+    // Pre-cache teeth morph targets by name for O(1) lookup
+    const teethTargetByName = new Map();
+    if (teethMesh?.morphTargetManager) {
+        for (let i = 0; i < teethMesh.morphTargetManager.numTargets; i++) {
+            const t = teethMesh.morphTargetManager.getTarget(i);
+            teethTargetByName.set(t.name, t);
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // SetValue utility — index-based via morphBindMap, name-scan fallback,
+    // plus teeth mesh companion shape
+    // ---------------------------------------------------------------------------
+    const setExprValue = (name, value) => {
+        if (expressionManager?.setValue) {
+            expressionManager.setValue(name, value);
+        } else {
+            const binds = morphBindMap.get(name);
+            if (binds) {
+                binds.forEach(b => { b.target.influence = value * b.weight; });
+            } else {
+                scene.meshes.forEach(m => {
+                    if (m.morphTargetManager) {
+                        for (let i = 0; i < m.morphTargetManager.numTargets; i++) {
+                            const target = m.morphTargetManager.getTarget(i);
+                            if (target.name === name) target.influence = value;
+                        }
+                    }
+                });
+            }
+        }
+
+        // Drive teeth companion shape (face VRM binds don't cover the teeth mesh)
+        const teethTargetName = TEETH_SHAPE_MAP[name];
+        if (teethTargetName) {
+            const t = teethTargetByName.get(teethTargetName);
+            if (t) t.influence = value;
+        }
+    };
+
+    // ---------------------------------------------------------------------------
+    // Filtering
+    // ---------------------------------------------------------------------------
+    function getFilteredExpressions() {
+        const mode = modeSelect.value;
+        if (mode === 'arkit') return allExpressions.filter(e => ARKIT_NAMES.includes(e));
+        if (mode === 'vrm0')  return allExpressions.filter(e => VRM0_NAMES.includes(e));
+        return allExpressions;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Tick — sine-wave cycling
+    // ---------------------------------------------------------------------------
+    let currentIndex = 0;
+    let elapsed = 0;
+    let lastMs = performance.now();
+
+    scene.onBeforeRenderObservable.add(() => {
+      const now = performance.now();
+      const dt  = (now - lastMs) / 1000;
+      lastMs = now;
+
+      const duration = parseFloat(speedSelect.value);
+      const list = getFilteredExpressions();
+      if (list.length === 0) return;
+
+      elapsed += dt;
+
+      if (elapsed > duration) {
+        elapsed = 0;
+        setExprValue(list[currentIndex], 0);
+        currentIndex = (currentIndex + 1) % list.length;
+      }
+
+      const value = Math.max(0, Math.sin(Math.PI * (elapsed / duration)));
+      const name  = list[currentIndex];
+      
+      setExprValue(name, value);
+
+      const type = ARKIT_NAMES.includes(name) ? 'ARKIT' : (VRM0_NAMES.includes(name) ? 'VRM0' : 'CUSTOM');
+      currentShapeEl.innerHTML =
+        `<span class="category">${type}</span>: ${name} : ${value.toFixed(2)}`;
+    });
+
+    modeSelect.addEventListener('change', () => {
+      allExpressions.forEach(e => setExprValue(e, 0));
+      currentIndex = 0;
+      elapsed = 0;
+    });
+
+    // ---------------------------------------------------------------------------
+    // Render loop
+    // ---------------------------------------------------------------------------
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener('resize', () => engine.resize());
+
+  </script>
+</body>
+</html>
