@@ -62,8 +62,8 @@ interface Props { editor: Editor; }
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function toFileUrl(p: string): string {
-  const norm = p.replace(/\\/g, "/");
-  return norm.startsWith("/") ? `file://${norm}` : `file:///${norm}`;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  return (require('url') as typeof import('url')).pathToFileURL(p).href;
 }
 
 function stem(filePath: string): string {
@@ -340,7 +340,7 @@ export function VrmCastPanel({ editor }: Props) {
       setTimeout(() => setLoadErr(""), 4000);
       return;
     }
-    await loaded.player.play(entry.abs, /* loop */ true);
+    await loaded.player.play(toFileUrl(entry.abs), /* loop */ true);
   }
 
   // ── Per-actor scene loading ────────────────────────────────────────────
@@ -358,14 +358,14 @@ export function VrmCastPanel({ editor }: Props) {
 
     try {
       const pub    = join(dirname(editor.state.projectPath), "public");
-      const vrmUrl = join(pub, actor.vrm);
+      const vrmUrl = toFileUrl(join(pub, actor.vrm));
       await loadVrmLoader();
       const vrm = await loadVrm(vrmUrl, scene,
         { x: actor.x, y: actor.y, z: actor.z }, actor.rotY);
       const player = new VrmaPlayer(scene, vrm);
 
       if (actor.initialClip) {
-        const vrmaUrl = join(pub, actor.initialClip);
+        const vrmaUrl = toFileUrl(join(pub, actor.initialClip));
         await player.play(vrmaUrl, actor.loop);
       }
 
@@ -373,7 +373,19 @@ export function VrmCastPanel({ editor }: Props) {
       setLoadedIds(prev => {
         const n = new Set(prev); n.delete(`__loading__${actor.id}`); n.add(actor.id); return n;
       });
-      editor.layout.console.log(`[VRM Cast] ${actor.id} loaded`);
+      editor.layout.console.log(`[VRM Cast] ${actor.id} loaded — meshes: ${vrm.meshes.length}`);
+      // Diagnostic: log mesh visibility & material state to help debug invisible VRM
+      for (const m of vrm.meshes) {
+        const mat = m.material;
+        const pos = m.getAbsolutePosition?.() ?? m.absolutePosition;
+        editor.layout.console.log(
+          `  mesh "${m.name}" visible=${m.isVisible} enabled=${m.isEnabled()} ` +
+          `mat=${mat ? mat.getClassName() : 'NULL'} ` +
+          `pos=(${pos?.x?.toFixed(2)},${pos?.y?.toFixed(2)},${pos?.z?.toFixed(2)})`
+        );
+      }
+      // Refresh BJSE's scene graph so the newly-added VRM nodes appear
+      editor.layout.graph.refresh();
     } catch (err: any) {
       setLoadedIds(prev => { const n = new Set(prev); n.delete(`__loading__${actor.id}`); return n; });
       const msg = err?.message ?? String(err);
@@ -386,7 +398,7 @@ export function VrmCastPanel({ editor }: Props) {
     const loaded = loadedActors.current.get(actorId);
     if (!loaded || !editor.state.projectPath) return;
     const pub     = join(dirname(editor.state.projectPath), "public");
-    const vrmaUrl = join(pub, clipRelPath);
+    const vrmaUrl = toFileUrl(join(pub, clipRelPath));
     await loaded.player.play(vrmaUrl, loop);
   }
 
