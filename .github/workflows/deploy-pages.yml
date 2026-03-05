@@ -25,16 +25,17 @@ jobs:
 
       - name: Stage CDN assets
         run: |
-          mkdir -p _site/models/AIAN
           mkdir -p _site/vrma
           mkdir -p _site/js
 
-          # VRM models
-          # AliciaSolid + avatar for Playground CDN demos
-          cp models/AliciaSolid.vrm _site/models/ 2>/dev/null || echo "AliciaSolid.vrm not found"
-          cp models/avatar.vrm      _site/models/ 2>/dev/null || echo "avatar.vrm not found"
-          # AIAN_F_1_Casual.vrm (VRM 1.0) — used by babvrm.html
-          cp "models/AIAN/AIAN_F_1_Casual.vrm" _site/models/AIAN/ 2>/dev/null || echo "AIAN model not found"
+          # Sync whole models/ directory to _site/models/
+          # This ensures AIAN, Asian, Black, etc. are all available.
+          # We use cp -r then cleanup or find to be surgical.
+          cp -r models _site/
+          find _site/models -name ".DS_Store" -delete
+          find _site/models -name "*.backup" -delete
+          # Optionally remove _CLEANED if any were left by mistake
+          find _site/models -name "*_CLEANED*" -delete
 
           # All VRMA animation clips (referenced by animations.json)
           if [ -d vrma ]; then
