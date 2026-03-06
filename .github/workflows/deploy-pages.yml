@@ -99,6 +99,9 @@ jobs:
           </html>
           INDEXEOF
 
+          echo "--- Final Staged Contents ---"
+          find _site -maxdepth 3
+          
           echo "--- Staged sizes ---"
           du -sh _site/models _site/vrma _site/js 2>/dev/null || true
           du -sh _site/
