@@ -25,19 +25,18 @@ jobs:
 
       - name: Stage CDN assets
         run: |
+          mkdir -p _site/models/AIAN
           mkdir -p _site/vrma
           mkdir -p _site/js
 
-          # Sync whole models/ directory to _site/models/
-          # This ensures AIAN, Asian, Black, etc. are all available.
-          # We use cp -r then cleanup or find to be surgical.
-          cp -r models _site/
-          find _site/models -name ".DS_Store" -delete
-          find _site/models -name "*.backup" -delete
-          # Optionally remove _CLEANED if any were left by mistake
-          find _site/models -name "*_CLEANED*" -delete
+          # Stage a limited set of VRM models to stay under 1GB limit
+          # Current total: Alicia (7.5M) + Seed (10M) + avatar (11M) + AIAN Casual (70M) = ~100MB
+          cp models/AliciaSolid.vrm _site/models/ 2>/dev/null || echo "AliciaSolid.vrm not found"
+          cp models/avatar.vrm      _site/models/ 2>/dev/null || echo "avatar.vrm not found"
+          cp models/Seed-san.vrm    _site/models/ 2>/dev/null || echo "Seed-san.vrm not found"
+          cp "models/AIAN/AIAN_F_1_Casual.vrm" _site/models/AIAN/ 2>/dev/null || echo "AIAN model not found"
 
-          # All VRMA animation clips (referenced by animations.json)
+          # All VRMA animation clips (~700MB)
           if [ -d vrma ]; then
             cp vrma/*.vrma _site/vrma/
             echo "Copied $(ls _site/vrma/ | wc -l) vrma files"
@@ -80,6 +79,7 @@ jobs:
             <h2>Live Demos</h2>
             <a class="demo" href="babvrm.html">babvrm.html — VRM + VRMA player</a>
             <a class="demo" href="arkit_compat_test_babylon.html">arkit_compat_test_babylon.html — ARKit expression cycler</a>
+            <a class="demo" href="compare.html">compare.html — A-Frame vs Babylon Side-by-Side</a>
 
             <h2>CDN Asset URLs</h2>
             <p class="assets">Base: <code>https://sbutltmedia.github.io/VRE/</code></p>
@@ -87,6 +87,7 @@ jobs:
             <ul class="assets">
               <li><code>models/AliciaSolid.vrm</code></li>
               <li><code>models/avatar.vrm</code></li>
+              <li><code>models/Seed-san.vrm</code> (VRM 1.0)</li>
               <li><code>models/AIAN/AIAN_F_1_Casual.vrm</code> (VRM 1.0)</li>
             </ul>
             <h3>VRMA Animations</h3>
