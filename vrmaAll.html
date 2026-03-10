@@ -1,0 +1,401 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Babylon.js VRM – All Animations</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <script src="https://preview.babylonjs.com/babylon.js"></script>
+  <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+  <style>
+    html,body,#renderCanvas{width:100%;height:100%;margin:0;padding:0;overflow:hidden;background:#001a33}
+    #ui{position:absolute;top:0;left:0;right:0;padding:10px 16px;display:flex;flex-direction:column;gap:6px;
+        font:13px monospace;color:#fff;background:linear-gradient(to bottom,rgba(0,10,26,.85),transparent);pointer-events:none}
+    #top-row{display:flex;align-items:center;gap:12px}
+    #desc{flex:1;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #counter{opacity:.5;white-space:nowrap;font-size:11px}
+    #skip-btn{pointer-events:all;padding:4px 12px;font:13px monospace;
+              background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);
+              color:#fff;border-radius:4px;cursor:pointer}
+    #skip-btn:hover{background:rgba(255,255,255,.3)}
+    #prog-bg{height:3px;background:rgba(255,255,255,.15);border-radius:2px}
+    #prog-bar{height:100%;background:rgba(100,180,255,.8);border-radius:2px;width:0%}
+    #status{opacity:.5;font-size:11px}
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+  <div id="ui">
+    <div id="top-row">
+      <div id="desc">Loading…</div>
+      <div id="counter"></div>
+      <button id="skip-btn">⏭ Skip</button>
+    </div>
+    <div id="prog-bg"><div id="prog-bar"></div></div>
+    <div id="status"></div>
+  </div>
+  <script type="module">
+    BABYLON.TransformNode.prototype.getTotalVertices ??= function(){ return 0; };
+
+    const params    = new URLSearchParams(window.location.search);
+    const VRM_FILE  = params.get('model') || 'models/AIAN/AIAN_F_1_Casual.vrm';
+    const BLEND_MS  = +(params.get('blend') || 1000); // default 1 second
+
+    const descEl    = document.getElementById('desc');
+    const counterEl = document.getElementById('counter');
+    const skipBtn   = document.getElementById('skip-btn');
+    const progEl    = document.getElementById('prog-bar');
+    const statusEl  = document.getElementById('status');
+
+    // ── Test-runner control surface (used by vrmaAll_test.mjs) ──────────────────
+    // phase:       'init' | 'loading' | 'playing' | 'blending'
+    // seekBlend(t) apply blend at t∈[0,1] without advancing time; call scene.render()
+    // relBlend()   resume auto-progression after seekBlend
+    // getBones()   current bone quaternions {name:{x,y,z,w}}
+    let _prevPose  = null;  // bone quats at end of previous animation
+    let _startPose = null;  // bone quats at frame-0 of next animation
+    let _blendT0   = 0;     // performance.now() when blend started
+    let _blendHeld = false; // true while Puppeteer has taken manual control
+    let _blendLastT = 0;    // last raw t passed to seekBlend
+
+    window.vrmaCtrl = {
+      phase: 'init',
+
+      seekBlend(t) {
+        if (window.vrmaCtrl.phase !== 'blending' || !_prevPose || !_startPose) return;
+        _blendHeld = true;
+        const c = Math.max(0, Math.min(1, t));
+        _blendLastT = c;
+        _applyBlend(c * c * (3 - 2 * c));
+        scene.render();
+      },
+
+      relBlend() {
+        // Rebase _blendT0 so blendObs resumes from the exact t where seekBlend left off.
+        _blendT0 = performance.now() - _blendLastT * BLEND_MS;
+        _blendHeld = false;
+      },
+
+      getBones() {
+        const out = {};
+        for (const [n, b] of _boneEntries) {
+          const q = b?.rotationQuaternion;
+          if (q) out[n] = { x:+q.x.toFixed(4), y:+q.y.toFixed(4),
+                            z:+q.z.toFixed(4), w:+q.w.toFixed(4) };
+        }
+        return out;
+      },
+
+      // Returns hips world position, hips local position, and root node position.
+      // Use this to verify world-space continuity during transitions.
+      getPositions() {
+        const hw  = hipsBone?.getAbsolutePosition();
+        const hlp = hipsBone?.position;
+        const rp  = rootNode?.position;
+        const fmt = v => v ? { x:+v.x.toFixed(4), y:+v.y.toFixed(4), z:+v.z.toFixed(4) } : null;
+        return { hipsWorld: fmt(hw), hipsLocal: fmt(hlp), rootPos: fmt(rp) };
+      },
+
+      // Label of the animation currently loading/playing
+      getAnimLabel() {
+        return document.getElementById('desc')?.textContent ?? '?';
+      },
+    };
+
+    // ── Load VRM loader + animation list ────────────────────────────────────────
+    const [, allAnims] = await Promise.all([
+      new Promise((res,rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      }),
+      fetch('animations.json').then(r => r.json()),
+    ]);
+
+    // Fisher-Yates shuffle
+    const queue = [...allAnims];
+    for (let i = queue.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [queue[i], queue[j]] = [queue[j], queue[i]];
+    }
+    let qIdx = 0;
+
+    // ── Scene ────────────────────────────────────────────────────────────────────
+    const canvas = document.getElementById('renderCanvas');
+    const engine = new BABYLON.Engine(canvas, true);
+    const scene  = new BABYLON.Scene(engine);
+
+    const camera = new BABYLON.ArcRotateCamera('cam', Math.PI/2, Math.PI/2-0.12, 5,
+      new BABYLON.Vector3(0, 0.9, 0), scene);
+    camera.attachControl(canvas, true);
+    camera.lowerRadiusLimit = 0.5; camera.upperRadiusLimit = 15;
+
+    new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0,1,0), scene);
+    const dirL = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-1,-2,-1), scene);
+    dirL.intensity = 0.5;
+
+    // ── Load VRM ─────────────────────────────────────────────────────────────────
+    statusEl.textContent = 'Loading VRM…';
+    await BABYLON.ImportMeshAsync(VRM_FILE, scene);
+    const vrmMgr   = scene.metadata?.vrmManagers?.[0];
+    if (!vrmMgr) throw new Error('VRM manager not found');
+
+    const hipsBone     = vrmMgr.humanoidBone['hips'];
+    const leftFootBone = vrmMgr.humanoidBone['leftFoot'];
+    const rootNode     = scene.rootNodes?.find(n => n.name === '__root__') ?? scene.meshes?.[0];
+    const avatar       = new BABYLON.AnimatorAvatar('vrm-avatar', rootNode);
+
+    const _boneEntries = Object.entries(vrmMgr.humanoidBone?.nodeMap ?? {});
+
+    // ── Camera follows hips ───────────────────────────────────────────────────────
+    scene.onBeforeRenderObservable.add(() => {
+      const h = hipsBone?.getAbsolutePosition();
+      if (h) camera.target = BABYLON.Vector3.Lerp(camera.target, h, 0.04);
+    });
+
+    // ── Pose helpers ──────────────────────────────────────────────────────────────
+    const _I = BABYLON.Quaternion.Identity();
+    function capturePose() {
+      const o = {};
+      for (const [n,b] of _boneEntries)
+        if (b?.rotationQuaternion) o[n] = b.rotationQuaternion.clone();
+      return o;
+    }
+    function applyPose(p) {
+      for (const [n,b] of _boneEntries)
+        if (b?.rotationQuaternion && p[n]) b.rotationQuaternion.copyFrom(p[n]);
+    }
+    function _applyBlend(t) {
+      // Blend bone rotations
+      for (const [n,b] of _boneEntries) {
+        if (!b?.rotationQuaternion) continue;
+        BABYLON.Quaternion.SlerpToRef(_prevPose[n]??_I, _startPose[n]??_I, t,
+                                      b.rotationQuaternion);
+      }
+      // Blend hips local position + keep world position constant
+      if (_prevHipsPos && _startHipsPos) {
+        _setHipsAndRoot(new BABYLON.Vector3(
+          _prevHipsPos.x + (_startHipsPos.x - _prevHipsPos.x) * t,
+          _prevHipsPos.y + (_startHipsPos.y - _prevHipsPos.y) * t,
+          _prevHipsPos.z + (_startHipsPos.z - _prevHipsPos.z) * t,
+        ));
+      }
+    }
+
+    // ── Root XZ continuity + hips-position blend ─────────────────────────────────
+    // Babylon's glTF loader applies scale(-1,1,1) on __root__ (negates X only):
+    //   world.x = root.x − local.x  →  root.x = target.x + local.x
+    //   world.z = root.z + local.z  →  root.z = target.z − local.z   (note: minus!)
+    // applyRootXZ works in pure world-space (delta method) so is sign-agnostic.
+    let _lastWorldHipsExit = null;
+    let _prevHipsPos       = null;
+    let _startHipsPos      = null;
+    let _blendHipsTarget   = null;
+
+    function applyRootXZ() {
+      if (!_lastWorldHipsExit) return;
+      const w = hipsBone.getAbsolutePosition();
+      rootNode.position.x += _lastWorldHipsExit.x - w.x;
+      rootNode.position.z += _lastWorldHipsExit.z - w.z;
+    }
+
+    // Scan first N frames for actual motion (skip leading T-pose / static reference frames).
+    // Requires group to already be started+paused so goToFrame() drives bones.
+    // Leaves the group seeked to bestFrame; returns bestFrame.
+    // Scores frames by how much they DIFFER FROM FRAME 0 of the animation (not from
+    // identity quats).  This correctly handles models whose natural bind-pose has
+    // non-identity quaternions (e.g. standing pose with w≈0 leg bones) — those would
+    // trigger the old identity-based threshold immediately at frame 0.
+    function findMotionFrame(group, maxScan = 12, threshold = 0.015) {
+      const animBones = _boneEntries.filter(([, b]) =>
+        group.targetedAnimations.some(
+          ta => ta.animation.targetProperty === 'rotationQuaternion' && ta.target === b
+        )
+      );
+      if (!animBones.length) return group.from;
+      const limit = Math.min(group.from + maxScan, group.to);
+
+      // Capture the animation's own frame-0 pose as reference.
+      group.goToFrame(group.from);
+      const refQuats = new Map();
+      for (const [, b] of animBones) {
+        if (b?.rotationQuaternion) refQuats.set(b, b.rotationQuaternion.clone());
+      }
+
+      let bestScore = -1, bestFrame = group.from;
+      for (let f = group.from + 1; f <= limit; f++) {
+        group.goToFrame(f);
+        let score = 0;
+        for (const [, b] of animBones) {
+          const q = b?.rotationQuaternion;
+          const r = refQuats.get(b);
+          if (q && r) {
+            const dot = Math.abs(q.x*r.x + q.y*r.y + q.z*r.z + q.w*r.w);
+            score += 1 - dot; // 0 = same as frame-0 ref, positive = diverged
+          }
+        }
+        if (score > bestScore) { bestScore = score; bestFrame = f; }
+        if (score > threshold * animBones.length) break;
+      }
+      group.goToFrame(bestFrame);
+      return bestFrame;
+    }
+
+    function _setHipsAndRoot(localPos) {
+      if (!_blendHipsTarget) return;
+      hipsBone.position.x = localPos.x;
+      hipsBone.position.y = localPos.y;
+      hipsBone.position.z = localPos.z;
+      // Correct signs per scale(-1,1,1) on __root__ (verified from live position data):
+      rootNode.position.x = _blendHipsTarget.x + localPos.x;  // world.x = root.x − local.x
+      rootNode.position.z = _blendHipsTarget.z - localPos.z;  // world.z = root.z + local.z
+    }
+
+    // ── Sequential playback ───────────────────────────────────────────────────────
+    let curGroup    = null;
+    let curContainer= null;
+    let blendObs    = null;
+    let endObs      = null;
+    let animDurMs   = 0;
+    let animStartMs = 0;
+    let busy        = false;
+
+    scene.onBeforeRenderObservable.add(() => {
+      if (!curGroup || busy || animDurMs <= 0) { progEl.style.width = '0%'; return; }
+      progEl.style.width = Math.min((performance.now()-animStartMs)/animDurMs*100,100)+'%';
+    });
+
+    async function playNext() {
+      if (busy) return;
+      busy = true;
+      window.vrmaCtrl.phase = 'loading';
+
+      if (qIdx >= queue.length) qIdx = 0;
+      const entry = queue[qIdx++];
+      counterEl.textContent = `${qIdx} / ${queue.length}`;
+      statusEl.textContent  = 'loading…';
+
+      // Tear down
+      if (endObs && curGroup)  { curGroup.onAnimationGroupEndObservable.remove(endObs); endObs=null; }
+      if (blendObs)            { scene.onBeforeRenderObservable.remove(blendObs); blendObs=null; }
+
+      // Snapshot exit pose + hips local position before cleanup
+      _prevPose    = capturePose();
+      _prevHipsPos = hipsBone.position.clone();
+      _blendHeld   = false;
+
+      if (curGroup)     { curGroup.stop(); curGroup.dispose(); curGroup=null; }
+      if (curContainer) { curContainer.dispose(); curContainer=null; }
+      if (scene.metadata?.vrmAnimationManagers) scene.metadata.vrmAnimationManagers=[];
+
+      // Load VRMA
+      let ac;
+      try { ac = await BABYLON.LoadAssetContainerAsync(entry.url, scene); }
+      catch(e) { console.warn('[vrmaAll] load failed:', entry.url); busy=false; playNext(); return; }
+      curContainer = ac;
+
+      const vrmAnimMgr = scene.metadata?.vrmAnimationManagers?.[0];
+      const animGroup  = ac.animationGroups[0];
+      if (!vrmAnimMgr?.animationMap || !animGroup) {
+        ac.dispose(); curContainer=null; busy=false; playNext(); return;
+      }
+
+      // Build node name map
+      const nodeMap = new Map();
+      animGroup.targetedAnimations.forEach((ta, i) => {
+        const bn   = vrmAnimMgr.animationMap.get(i);
+        const bone = vrmMgr.humanoidBone[bn];
+        if (bone && ta.target?.name) nodeMap.set(ta.target.name, bone.name);
+      });
+
+      const remapped = avatar.retargetAnimationGroup(animGroup, {
+        animationGroupName:      'vrma-remapped',
+        fixRootPosition:         true,
+        rootNodeName:            hipsBone.name,
+        groundReferenceNodeName: leftFootBone?.name,
+        mapNodeNames:            nodeMap,
+      });
+
+      if (!remapped.targetedAnimations.length) {
+        remapped.dispose(); ac.dispose(); curContainer=null; busy=false; playNext(); return;
+      }
+
+      const fps = remapped.targetedAnimations[0].animation.framePerSecond;
+
+      // start() creates _animatables so goToFrame() actually drives VRM bones.
+      // pause() freezes the clock — _animate() skips paused groups, so our
+      // blendObs values won't be overwritten each frame while we blend manually.
+      remapped.start(false, 1.0, remapped.from, remapped.to, false);
+      remapped.pause();
+
+      // Find first frame with real motion (skips T-pose reference frames).
+      // goToFrame() now works because animatables exist.
+      const motionFrom = findMotionFrame(remapped);
+
+      // Capture blend target (bones correctly driven by goToFrame above)
+      _startPose      = capturePose();
+      _startHipsPos   = hipsBone.position.clone();
+      _blendHipsTarget = _lastWorldHipsExit?.clone() ?? null;
+
+      // Shift rootNode so world-XZ hips = exit world pos (at motion-start local pos)
+      applyRootXZ();
+      _lastWorldHipsExit = null;
+
+      // Set blend t=0 state: exit rotations + exit hips local pos + root tracking
+      applyPose(_prevPose);
+      _setHipsAndRoot(_prevHipsPos ?? _startHipsPos);
+
+      animDurMs   = (remapped.to - motionFrom) / fps * 1000;
+      _blendT0    = performance.now();
+      window.vrmaCtrl.phase = 'blending';
+
+      // ── 1-second blend: exit pose → motion-start pose of new animation ────────
+      blendObs = scene.onBeforeRenderObservable.add(() => {
+        if (_blendHeld) return;
+        const raw = (performance.now() - _blendT0) / BLEND_MS;
+        if (raw < 1) {
+          _applyBlend(raw * raw * (3 - 2 * raw));
+          return;
+        }
+        // Blend complete — start animation from motionFrom (not frame 0 which may be T-pose).
+        // stop() first so animatables are disposed; start() then creates fresh ones from
+        // motionFrom.  Calling start() on a group that already has animatables (created
+        // during the start()+pause() setup above) ignores the new from/to and reuses the
+        // existing paused animatables, effectively resetting to the original from frame.
+        scene.onBeforeRenderObservable.remove(blendObs); blendObs=null;
+
+        remapped.stop();
+        remapped.start(false, 1.0, motionFrom, remapped.to, false);
+        curGroup    = remapped;
+        animStartMs = performance.now();
+        busy        = false;
+        window.vrmaCtrl.phase = 'playing';
+
+        descEl.textContent   = entry.description || entry.url;
+        statusEl.textContent = `${remapped.targetedAnimations.length} tracks`;
+        console.log('[vrmaAll]', entry.url, 'tracks:', remapped.targetedAnimations.length);
+
+        endObs = remapped.onAnimationGroupEndObservable.addOnce(() => {
+          _lastWorldHipsExit = hipsBone.getAbsolutePosition().clone();
+          playNext();
+        });
+      });
+    }
+
+    // Skip: capture current state and advance
+    skipBtn.addEventListener('click', () => {
+      if (endObs && curGroup) { curGroup.onAnimationGroupEndObservable.remove(endObs); endObs=null; }
+      if (blendObs)           { scene.onBeforeRenderObservable.remove(blendObs); blendObs=null; }
+      _blendHeld = false;
+      if (curGroup) { _lastWorldHipsExit = hipsBone.getAbsolutePosition().clone(); curGroup.stop(); }
+      busy = false;
+      playNext();
+    });
+
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener('resize', () => engine.resize());
+
+    await playNext();
+  </script>
+</body>
+</html>
