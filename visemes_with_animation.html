@@ -41,7 +41,7 @@
 <script>
     AFRAME.registerComponent('viseme-with-animation', {
         schema: {
-            vrm: { type: 'string', default: 'models/AIAN/AIAN_F_1_Casual_CLEANED.vrm' },
+            vrm: { type: 'string', default: 'models/AIAN/AIAN_F_1_Casual.vrm' },
             animation: { type: 'string', default: '' }, // Path to .vrma or .glb animation file
             duration: { type: 'number', default: 1.5 } // Seconds per viseme
         },
@@ -199,7 +199,7 @@
     <a-entity
         id="avatar"
         viseme-with-animation="
-            vrm: models/AIAN/AIAN_F_1_Casual_CLEANED.vrm;
+            vrm: models/AIAN/AIAN_F_1_Casual.vrm;
             duration: 1.5;
             animation:
         "

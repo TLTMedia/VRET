@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Babylon.js ARKit Shapes Demo</title>
+  <title>Babylon.js  Shapes Demo</title>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
@@ -31,7 +31,7 @@
   <canvas id="renderCanvas"></canvas>
 
   <div id="info">
-    <div>ARKit Shapes Demo — Babylon.js</div>
+    <div> Shapes Demo — Babylon.js</div>
     <div id="status">Loading model…</div>
     <div id="current-shape" class="highlight"></div>
     <div id="shape-count"></div>
@@ -58,12 +58,12 @@
 
   <script type="module">
 
-    const VRM_FILE = 'models/AIAN/AIAN_F_1_Casual_CLEANED.vrm';
+    const VRM_FILE = 'models/AIAN/AIAN_F_1_Casual.vrm';
 
     // ---------------------------------------------------------------------------
-    // ARKit shape catalogue (matches arkit_demo.html exactly)
+    //  shape catalogue (matches _demo.html exactly)
     // ---------------------------------------------------------------------------
-    const ARKIT_SHAPES = {
+    const _SHAPES = {
       eyes:        ['eyeBlinkLeft','eyeBlinkRight','eyeWideLeft','eyeWideRight','eyeSquintLeft','eyeSquintRight'],
       jaw:         ['jawOpen','jawForward','jawLeft','jawRight'],
       mouth:       ['mouthClose','mouthFunnel','mouthPucker','mouthLeft','mouthRight',
@@ -136,7 +136,7 @@
     statusEl.textContent = 'Scanning morph targets…';
 
     // Log all mesh names + morph counts so we can confirm H_DDS_HighRes is present
-    console.log('[arkit_bab] meshes:',
+    console.log('[_bab] meshes:',
       scene.meshes.map(m => `${m.name} (morphs: ${m.morphTargetManager?.numTargets ?? 0})`));
 
     // ---------------------------------------------------------------------------
@@ -166,13 +166,13 @@
     const teethUpMap   = buildMorphMap(teethUpMesh);
 
     // ---------------------------------------------------------------------------
-    // Audit which of the 52 ARKit shapes are present
+    // Audit which of the 52  shapes are present
     // ---------------------------------------------------------------------------
-    const allShapes = Object.values(ARKIT_SHAPES).flat();
+    const allShapes = Object.values(_SHAPES).flat();
     const available = allShapes.filter(s => faceMap.has(s));
 
-    console.group('[arkit_bab] ARKit blend shape audit');
-    for (const [cat, shapes] of Object.entries(ARKIT_SHAPES)) {
+    console.group('[_bab]  blend shape audit');
+    for (const [cat, shapes] of Object.entries(_SHAPES)) {
       const present = shapes.filter(s => faceMap.has(s));
       const missing = shapes.filter(s => !faceMap.has(s));
       console.group(`${cat} (${present.length}/${shapes.length})`);
@@ -183,7 +183,7 @@
     console.log(`Total available: ${available.length} / 52`);
     console.groupEnd();
 
-    shapeCountEl.textContent = `Available: ${available.length} of 52 ARKit shapes`;
+    shapeCountEl.textContent = `Available: ${available.length} of 52  shapes`;
     statusEl.textContent = faceMesh
       ? `Ready — ${available.length} shapes found. Cycling…`
       : 'Face mesh not found';
@@ -206,22 +206,22 @@
 
     function getShapesForMode(mode) {
       switch (mode) {
-        case 'eyes':  return ARKIT_SHAPES.eyes.filter(s => faceMap.has(s));
-        case 'mouth': return ARKIT_SHAPES.mouth.filter(s => faceMap.has(s));
-        case 'brows': return ARKIT_SHAPES.brows.filter(s => faceMap.has(s));
+        case 'eyes':  return _SHAPES.eyes.filter(s => faceMap.has(s));
+        case 'mouth': return _SHAPES.mouth.filter(s => faceMap.has(s));
+        case 'brows': return _SHAPES.brows.filter(s => faceMap.has(s));
         default:      return available;
       }
     }
 
     function getCategoryFor(shape) {
-      for (const [cat, shapes] of Object.entries(ARKIT_SHAPES)) {
+      for (const [cat, shapes] of Object.entries(_SHAPES)) {
         if (shapes.includes(shape)) return cat.toUpperCase();
       }
       return 'OTHER';
     }
 
     // ---------------------------------------------------------------------------
-    // Tick — sine-wave cycling (direct port of arkit_demo.html tick())
+    // Tick — sine-wave cycling (direct port of _demo.html tick())
     // ---------------------------------------------------------------------------
     let currentIndex = 0;
     let elapsed = 0;

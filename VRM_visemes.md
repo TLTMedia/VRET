@@ -11,7 +11,7 @@ Enable standard viseme support (A, I, U, E, O, F, M, S, CH, K, N) on VRM models 
 
 ### Test Setup
 - **Test File**: `visemes.html`
-- **Target Model**: `models/AIAN/AIAN_F_1_Casual_CLEANED.vrm`
+- **Target Model**: `models/AIAN/AIAN_F_1_Casual.vrm`
 - **Issue**: Visemes not displaying in A-Frame viewer
 
 ### Investigation Process
@@ -201,7 +201,7 @@ Wiring VRM BlendShapes...
     Bind created: mesh_object_name='H_DDS_HighRes', index='E', weight=1.0
   Wiring Preset O -> Shape Key 'O' on mesh 'H_DDS_HighRes'
     Bind created: mesh_object_name='H_DDS_HighRes', index='O', weight=1.0
-SUCCESS: Exported models/AIAN/AIAN_F_1_Casual_CLEANED.vrm
+SUCCESS: Exported models/AIAN/AIAN_F_1_Casual.vrm
 ```
 
 **Result**: ✓ Script completed successfully
@@ -301,7 +301,7 @@ The `visemes.html` component should now work correctly:
 **Console Output**:
 ```
 ✓ A-Frame VRM components registered (using official three-vrm libraries)
-✓ VRM loaded successfully: models/AIAN/AIAN_F_1_Casual_CLEANED.vrm
+✓ VRM loaded successfully: models/AIAN/AIAN_F_1_Casual.vrm
 ✓ Face mesh found: H_DDS_HighRes
 ```
 
@@ -426,6 +426,6 @@ All 11 visemes (A, I, U, E, O, F, M, S, CH, K, N) are now working correctly with
 
 ## Files Generated
 
-- `models/AIAN/AIAN_F_1_Casual_CLEANED.vrm` - Fixed VRM with working visemes
-- `models/AIAN/AIAN_F_1_Casual_CLEANED.vrm.backup` - Previous version backup
+- `models/AIAN/AIAN_F_1_Casual.vrm` - Fixed VRM with working visemes
+- `models/AIAN/AIAN_F_1_Casual.vrm.backup` - Previous version backup
 

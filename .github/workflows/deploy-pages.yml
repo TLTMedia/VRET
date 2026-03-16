@@ -79,6 +79,7 @@ jobs:
 
             <h2>Live Demos</h2>
             <a class="demo" href="babvrm.html">babvrm.html — VRM + VRMA player</a>
+            <a class="demo" href="walk_and_talk.html">walk_and_talk.html — Walk & Talk (A2F JSON)</a>
             <a class="demo" href="arkit_compat_test_babylon.html">arkit_compat_test_babylon.html — ARKit expression cycler</a>
 
             <h2>CDN Asset URLs</h2>

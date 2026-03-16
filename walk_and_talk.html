@@ -1,0 +1,168 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>VRM Walk & Talk — Babylon.js</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <script src="https://preview.babylonjs.com/babylon.js"></script>
+  <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+  <style>
+    html, body, #renderCanvas { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #001a33; }
+    #ui {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      background: rgba(0,0,0,0.7); padding: 12px 20px; border-radius: 8px;
+      color: white; font: 14px monospace; pointer-events: none;
+    }
+    #ui * { pointer-events: auto; }
+    #status { color: #aaa; font-size: 11px; }
+    .controls { display: flex; gap: 10px; align-items: center; }
+    button { cursor: pointer; padding: 4px 12px; }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+  <div id="ui">
+    <div style="font-weight:bold; margin-bottom:4px">Walk & Talk Demo (VRMA + Audio2Face JSON)</div>
+    <div id="desc">Loading assets...</div>
+    <div id="status">●● initializing…</div>
+    <div class="controls">
+      <button id="playBtn" disabled>Play Loop</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { ARKitFaceDriver } from './arkit-face-driver.js';
+
+    // ── Configuration ──────────────────────────────────────────────────────────
+    const VRM_FILE  = 'models/AIAN/AIAN_F_1_Casual.vrm';
+    const VRMA_FILE = 'vrma/02_01.vrma'; // Standard walk
+    const A2F_JSON  = 'audio/a2f_sample.json';
+
+    // Monkey-patch: AnimatorAvatar's getChildMeshes predicate calls getTotalVertices
+    BABYLON.TransformNode.prototype.getTotalVertices ??= function() { return 0; };
+
+    // ── Load VRM Loader ──────────────────────────────────────────────────────
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+
+    const canvas = document.getElementById('renderCanvas');
+    const engine = new BABYLON.Engine(canvas, true);
+    const scene  = new BABYLON.Scene(engine);
+
+    // ── Setup Scene ────────────────────────────────────────────────────────────
+    const camera = new BABYLON.ArcRotateCamera('cam', Math.PI/2, Math.PI/2.2, 3.5, new BABYLON.Vector3(0, 1.2, 0), scene);
+    camera.wheelPrecision = 50;
+    camera.minZ = 0.1;
+    camera.attachControl(canvas, true);
+
+    new BABYLON.HemisphericLight('light1', new BABYLON.Vector3(0, 1, 0), scene);
+    const dirLight = new BABYLON.DirectionalLight('dir01', new BABYLON.Vector3(0, -1, 1), scene);
+    dirLight.position = new BABYLON.Vector3(0, 5, -5);
+
+    const statusEl = document.getElementById('status');
+    const descEl   = document.getElementById('desc');
+    const playBtn  = document.getElementById('playBtn');
+
+    // ── Load Assets ──────────────────────────────────────────────────────────
+    try {
+      statusEl.textContent = 'Loading VRM...';
+      await BABYLON.SceneLoader.ImportMeshAsync(null, VRM_FILE, null, scene);
+      const vrmManager = scene.metadata?.vrmManagers?.[0];
+      if (!vrmManager) throw new Error("VRM manager not found");
+      
+      const faceDriver = new ARKitFaceDriver(vrmManager, scene);
+      
+      statusEl.textContent = 'Loading Animation...';
+      const animContainer = await BABYLON.LoadAssetContainerAsync(VRMA_FILE, scene);
+      const vrmAnimManager = scene.metadata?.vrmAnimationManagers?.[0];
+      const animGroup      = animContainer.animationGroups[0];
+
+      if (!vrmAnimManager?.animationMap || !animGroup) {
+          throw new Error("No animation data found in VRMA");
+      }
+
+      // Build name map: VRMA source target name → VRM skeleton bone name
+      const mapNodeNames = new Map();
+      animGroup.targetedAnimations.forEach((targeted, i) => {
+        const boneName = vrmAnimManager.animationMap.get(i);
+        const bone = vrmManager.humanoidBone[boneName];
+        if (bone && targeted.target?.name) {
+          mapNodeNames.set(targeted.target.name, bone.name);
+        }
+      });
+
+      // VRM hips bone (root reference for AnimatorAvatar fixRootPosition)
+      const vrmHipsBone     = vrmManager.humanoidBone['hips'];
+      const vrmLeftFootBone = vrmManager.humanoidBone['leftFoot'];
+
+      // Build AnimatorAvatar once from the VRM __root__ mesh
+      const vrmRootMesh = scene.rootNodes?.find(n => n.name === '__root__') ?? scene.meshes?.[0];
+      const vrmAvatar = new BABYLON.AnimatorAvatar('vrm-avatar', vrmRootMesh);
+
+      // Retarget via AnimatorAvatar
+      const remapped = vrmAvatar.retargetAnimationGroup(animGroup, {
+        animationGroupName:      'vrma-remapped',
+        fixRootPosition:         true,
+        rootNodeName:            vrmHipsBone?.name,
+        groundReferenceNodeName: vrmLeftFootBone?.name,
+        mapNodeNames,
+      });
+      remapped.stop();
+
+      statusEl.textContent = 'Loading A2F JSON...';
+      const a2fResponse = await fetch(A2F_JSON);
+      const a2fData = await a2fResponse.json();
+      const a2fFrames = a2fData.frames;
+      const a2fFPS = a2fData.metadata.fps;
+      const a2fShapeNames = a2fData.metadata.shapeNames;
+
+      statusEl.textContent = 'Ready';
+      descEl.textContent = `Walking: ${VRMA_FILE} | Talking: ${A2F_JSON}`;
+      playBtn.disabled = false;
+
+      let isPlaying = false;
+      let startTime = 0;
+
+      playBtn.onclick = () => {
+        isPlaying = !isPlaying;
+        if (isPlaying) {
+          startTime = performance.now();
+          remapped.start(true);
+          playBtn.textContent = 'Stop';
+        } else {
+          remapped.stop();
+          faceDriver.reset();
+          playBtn.textContent = 'Play Loop';
+        }
+      };
+
+      scene.onBeforeRenderObservable.add(() => {
+        if (!isPlaying) return;
+
+        const elapsed = (performance.now() - startTime) / 1000;
+        
+        // Drive A2F Facial Animation
+        const frameIdx = Math.floor(elapsed * a2fFPS) % a2fFrames.length;
+        const weights = a2fFrames[frameIdx];
+        
+        for (let i = 0; i < a2fShapeNames.length; i++) {
+          faceDriver.set(a2fShapeNames[i], weights[i]);
+        }
+      });
+
+    } catch (e) {
+      console.error(e);
+      statusEl.textContent = 'Error: ' + e.message;
+    }
+
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener('resize', () => engine.resize());
+
+  </script>
+</body>
+</html>

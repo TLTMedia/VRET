@@ -38,7 +38,7 @@ console.log(`
 
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
 
-const AFRAME_URL  = `http://localhost:${PORT}/animate.html?model=models/AIAN/AIAN_F_1_Casual_CLEANED.vrm#vrma/40_11.vrma`;
+const AFRAME_URL  = `http://localhost:${PORT}/animate.html?model=models/AIAN/AIAN_F_1_Casual.vrm#vrma/40_11.vrma`;
 const BABYLON_URL = `http://localhost:${PORT}/babvrm.html#vrma/40_11.vrma`;
 
 const [afPage, babPage] = await Promise.all([

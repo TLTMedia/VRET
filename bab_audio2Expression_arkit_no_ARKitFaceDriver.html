@@ -1,0 +1,444 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Babylon.js Expression Player — ARKit (no ARKitFaceDriver)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <script src="https://preview.babylonjs.com/babylon.js"></script>
+  <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+  <style>
+    html, body, #renderCanvas { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #111; }
+    #info {
+      position: fixed; top: 20px; left: 20px;
+      color: white; font-family: monospace;
+      background: rgba(0,0,0,0.8); padding: 12px 15px; border-radius: 5px;
+      pointer-events: none; font-size: 1.1em; z-index: 100;
+    }
+    .highlight { color: #00ff00; font-weight: bold; }
+    .dim { color: #888; }
+    #controls {
+      position: fixed; bottom: 20px; left: 20px; right: 20px;
+      background: rgba(0,0,0,0.85); padding: 14px 18px; border-radius: 8px;
+      z-index: 100; color: white; font-family: monospace;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    #controls .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    button {
+      background: #333; color: white; border: 1px solid #666;
+      padding: 6px 14px; font-family: monospace; cursor: pointer; border-radius: 4px;
+    }
+    button:hover { background: #444; }
+    button:disabled { opacity: 0.4; cursor: default; }
+    button.active { background: #005588; border-color: #0088cc; }
+    label.file-btn {
+      background: #333; color: #aaa; border: 1px solid #555;
+      padding: 5px 10px; cursor: pointer; border-radius: 4px; font-size: 0.9em;
+    }
+    label.file-btn:hover { background: #444; color: white; }
+    label.file-btn span { color: #0af; }
+    input[type=file] { display: none; }
+    #timeline { height: 6px; background: #333; border-radius: 3px; position: relative; flex: 1; cursor: pointer; }
+    #timeline-fill { height: 100%; background: #0088cc; border-radius: 3px; width: 0%; pointer-events: none; }
+    #time-display { font-size: 0.9em; color: #aaa; min-width: 110px; text-align: right; }
+    #expr-display { font-size: 0.85em; color: #888; }
+    .section-label { color: #ffaa00; font-size: 0.85em; }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+
+  <div id="info">
+    <div>Expression Player — Babylon.js ARKit</div>
+    <div id="status">Loading model…</div>
+    <div id="current-expr" class="highlight"></div>
+    <div id="frame-info" class="dim"></div>
+  </div>
+
+  <div id="controls">
+    <div class="row">
+      <span class="section-label">Blendshapes:</span>
+      <label class="file-btn">
+        Load JSON <span id="json-name">—</span>
+        <input type="file" id="json-file" accept=".json">
+      </label>
+      <button id="loop-btn" class="active">Loop: ON</button>
+    </div>
+    <div class="row">
+      <button id="play-btn" disabled>▶ Play</button>
+      <button id="stop-btn" disabled>■ Stop</button>
+      <div id="timeline"><div id="timeline-fill"></div></div>
+      <span id="time-display">0:00.00 / 0:00.00</span>
+    </div>
+    <div class="row" id="expr-display">Loading JSON…</div>
+  </div>
+
+  <script type="module">
+    BABYLON.TransformNode.prototype.getTotalVertices ??= function() { return 0; };
+
+    const VRM_FILE = 'models/AIAN/AIAN_F_1_Busi.vrm';
+
+    const statusEl     = document.getElementById('status');
+    const currentExpr  = document.getElementById('current-expr');
+    const frameInfo    = document.getElementById('frame-info');
+    const playBtn      = document.getElementById('play-btn');
+    const stopBtn      = document.getElementById('stop-btn');
+    const loopBtn      = document.getElementById('loop-btn');
+    const jsonFileIn   = document.getElementById('json-file');
+    const jsonNameEl   = document.getElementById('json-name');
+    const timelineEl   = document.getElementById('timeline');
+    const timelineFill = document.getElementById('timeline-fill');
+    const timeDisplay  = document.getElementById('time-display');
+    const exprDisplay  = document.getElementById('expr-display');
+
+    // ---------------------------------------------------------------------------
+    // VRM loader + scene
+    // ---------------------------------------------------------------------------
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+
+    const canvas = document.getElementById('renderCanvas');
+    const engine = new BABYLON.Engine(canvas, true);
+    const scene  = new BABYLON.Scene(engine);
+
+    const camera = new BABYLON.ArcRotateCamera('cam', Math.PI / 2, Math.PI / 2 - 0.12, 1.2,
+      new BABYLON.Vector3(0, 1.55, 0), scene);
+    camera.attachControl(canvas, true);
+
+    new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
+    const dirLight = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-1, -2, -1), scene);
+    dirLight.intensity = 0.5;
+    const fillLight = new BABYLON.PointLight('fill', new BABYLON.Vector3(0, 1.6, -1), scene);
+    fillLight.intensity = 0.6;
+
+    statusEl.textContent = 'Loading VRM…';
+    try {
+      await BABYLON.ImportMeshAsync(VRM_FILE, scene);
+    } catch (e) {
+      statusEl.textContent = 'ERROR: ' + e.message;
+      throw e;
+    }
+
+    const vrmManager = scene.metadata?.vrmManagers?.[0];
+    if (!vrmManager) throw new Error('VRM manager not found');
+
+    // ---------------------------------------------------------------------------
+    // VRM expression system — drives morph targets (including teeth companion
+    // shapes) correctly for this model via ext10.expressions bindings.
+    // ---------------------------------------------------------------------------
+    let expressionManager = vrmManager.expressionManager ?? vrmManager.ext10?.expressionManager;
+
+    const morphBindMap = new Map(); // expression name → [{target, weight}]
+    if (vrmManager.ext10?.expressions) {
+      const buildBinds = (expr) => {
+        const binds = expr?.morphTargetBinds;
+        if (!binds?.length) return [];
+        return binds.flatMap(b => {
+          const tn = vrmManager.transformNodeCache?.[b.node];
+          if (!tn) return [];
+          const mesh = scene.meshes.find(m => m.name === tn.name && m.morphTargetManager);
+          if (!mesh) return [];
+          const target = mesh.morphTargetManager.getTarget(b.index);
+          return target ? [{ target, weight: b.weight }] : [];
+        });
+      };
+      for (const [k, e] of Object.entries(vrmManager.ext10.expressions.preset ?? {})) {
+        const b = buildBinds(e); if (b.length) morphBindMap.set(k, b);
+      }
+      for (const [k, e] of Object.entries(vrmManager.ext10.expressions.custom ?? {})) {
+        const b = buildBinds(e); if (b.length) morphBindMap.set(k, b);
+      }
+      console.log('[A2E] morphBindMap entries:', morphBindMap.size);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Eye look → bone rotation (VRM expression system doesn't handle these)
+    // ---------------------------------------------------------------------------
+    const leftEyeBone  = vrmManager.humanoidBone?.['leftEye']  ?? null;
+    const rightEyeBone = vrmManager.humanoidBone?.['rightEye'] ?? null;
+    const leftEyeRestQ  = leftEyeBone?.rotationQuaternion?.clone()  ?? BABYLON.Quaternion.Identity();
+    const rightEyeRestQ = rightEyeBone?.rotationQuaternion?.clone() ?? BABYLON.Quaternion.Identity();
+
+    // Accumulate all 8 eyeLook values so we can compute net pitch/yaw per eye
+    const eyeV = { eyeLookDownLeft:0, eyeLookUpLeft:0, eyeLookInLeft:0, eyeLookOutLeft:0,
+                   eyeLookDownRight:0, eyeLookUpRight:0, eyeLookInRight:0, eyeLookOutRight:0 };
+
+    function flushEyeBones() {
+      const pitchL = (eyeV.eyeLookDownLeft  - eyeV.eyeLookUpLeft)  * 0.25;
+      const yawL   = (eyeV.eyeLookInLeft    - eyeV.eyeLookOutLeft)  * 0.25;
+      const pitchR = (eyeV.eyeLookDownRight - eyeV.eyeLookUpRight) * 0.25;
+      const yawR   = (eyeV.eyeLookOutRight  - eyeV.eyeLookInRight)  * 0.25;
+      if (leftEyeBone)  leftEyeBone.rotationQuaternion  = BABYLON.Quaternion.RotationYawPitchRoll(yawL, pitchL, 0).multiply(leftEyeRestQ);
+      if (rightEyeBone) rightEyeBone.rotationQuaternion = BABYLON.Quaternion.RotationYawPitchRoll(yawR, pitchR, 0).multiply(rightEyeRestQ);
+    }
+
+    function resetEyeBones() {
+      for (const k of Object.keys(eyeV)) eyeV[k] = 0;
+      if (leftEyeBone)  leftEyeBone.rotationQuaternion  = leftEyeRestQ.clone();
+      if (rightEyeBone) rightEyeBone.rotationQuaternion = rightEyeRestQ.clone();
+    }
+
+    // ---------------------------------------------------------------------------
+    // setExpr — routes each ARKit shape to the right mechanism
+    // ---------------------------------------------------------------------------
+    const EYE_LOOK_SET = new Set(['eyeLookDownLeft','eyeLookUpLeft','eyeLookInLeft','eyeLookOutLeft',
+                                   'eyeLookDownRight','eyeLookUpRight','eyeLookInRight','eyeLookOutRight']);
+
+    const setExpr = (name, value) => {
+      if (name === 'tongueOut') return; // no tongue mesh
+
+      if (EYE_LOOK_SET.has(name)) {
+        eyeV[name] = Math.max(0, Math.min(1, value));
+        return; // flushed to bones at end of applyFrame
+      }
+
+      // VRM expression manager (drives morph + teeth companion bindings together)
+      if (expressionManager?.setValue) {
+        expressionManager.setValue(name, value);
+        return;
+      }
+
+      // Fallback: morphBindMap (index-based, same data as expression manager)
+      const binds = morphBindMap.get(name);
+      if (binds) {
+        binds.forEach(b => { b.target.influence = value * b.weight; });
+        return;
+      }
+
+      // Last resort: scan all meshes by morph target name
+      scene.meshes.forEach(m => {
+        if (!m.morphTargetManager) return;
+        for (let i = 0; i < m.morphTargetManager.numTargets; i++) {
+          const t = m.morphTargetManager.getTarget(i);
+          if (t.name === name) t.influence = value;
+        }
+      });
+    };
+
+    // ---------------------------------------------------------------------------
+    // Head / neck bone — capture rest pose for additive rotation
+    // ---------------------------------------------------------------------------
+    const headBone = vrmManager.humanoidBone?.['head'];
+    const neckBone = vrmManager.humanoidBone?.['neck'];
+
+    // Clone rest-pose quaternions (may be null if bone missing)
+    const headRestQ = headBone?.rotationQuaternion?.clone() ?? null;
+    const neckRestQ = neckBone?.rotationQuaternion?.clone() ?? null;
+
+    // LAM head_pose = [pitch, yaw, roll] in radians (camera-space Euler, small values)
+    // VRM 1.0 root has 180°Y — negate yaw and roll to map from camera to model space.
+    function applyHeadPose(pyr) {
+      if (!pyr) {
+        if (headBone && headRestQ) headBone.rotationQuaternion = headRestQ.clone();
+        if (neckBone && neckRestQ) neckBone.rotationQuaternion = neckRestQ.clone();
+        return;
+      }
+      const [pitch, yaw, roll] = pyr;
+      // Split 70/30 between head and neck for natural movement
+      const hq = BABYLON.Quaternion.RotationYawPitchRoll(-yaw * 0.7,  pitch * 0.7, -roll * 0.7);
+      const nq = BABYLON.Quaternion.RotationYawPitchRoll(-yaw * 0.3,  pitch * 0.3, -roll * 0.3);
+      if (headBone && headRestQ) headBone.rotationQuaternion = headRestQ.multiply(hq);
+      if (neckBone && neckRestQ) neckBone.rotationQuaternion = neckRestQ.multiply(nq);
+    }
+
+    console.log('[HeadRot] headBone:', headBone?.name, ' neckBone:', neckBone?.name);
+
+    statusEl.textContent = 'Ready';
+
+    // ---------------------------------------------------------------------------
+    // JSON parser — A2F compact or LAM format
+    // ---------------------------------------------------------------------------
+    function parseJSON(json) {
+      const fps = json.metadata?.fps ?? 30;
+
+      // LAM format: top-level "names" + "frames[].weights" + optional "head_pose"
+      if (Array.isArray(json.names) && json.frames?.[0]?.weights) {
+        return {
+          fps,
+          shapeNames: json.names,
+          frames:     json.frames.map(f => f.weights),
+          headPose:   json.head_pose ?? null,   // [[pitch,yaw,roll], …] parallel to frames
+        };
+      }
+
+      // A2F compact format
+      if (Array.isArray(json.metadata?.shapeNames) && Array.isArray(json.frames)) {
+        return { fps, shapeNames: json.metadata.shapeNames, frames: json.frames, headPose: null };
+      }
+
+      throw new Error('Unrecognised JSON format');
+    }
+
+    // ---------------------------------------------------------------------------
+    // Playback state — timer-based, no audio
+    // ---------------------------------------------------------------------------
+    let bsData     = null;
+    let looping    = true;
+    let isPlaying  = false;
+    let playT      = 0;       // current playback time in seconds
+    let lastPerfMs = null;
+    let lastFrameIdx = -1;
+
+    function fmt(s) {
+      const m = Math.floor(s / 60);
+      return `${m}:${String(Math.floor(s % 60)).padStart(2,'0')}.${String(Math.floor((s % 1)*100)).padStart(2,'0')}`;
+    }
+
+    function setReady() {
+      const ok = !!bsData;
+      playBtn.disabled = !ok;
+      stopBtn.disabled = !ok;
+    }
+
+    function applyFrame(frameIdx) {
+      const weights = bsData.frames[frameIdx];
+      const names   = bsData.shapeNames;
+      for (let i = 0; i < names.length; i++) setExpr(names[i], weights[i] ?? 0);
+
+      // Flush accumulated eyeLook values to eye bones
+      flushEyeBones();
+
+      // Head pose (LAM top-level head_pose array, parallel to frames)
+      applyHeadPose(bsData.headPose ? bsData.headPose[frameIdx] : null);
+
+      let topIdx = 0, topW = 0;
+      for (let i = 0; i < weights.length; i++) if (weights[i] > topW) { topW = weights[i]; topIdx = i; }
+      currentExpr.textContent = topW > 0.01 ? `${names[topIdx]}: ${topW.toFixed(3)}` : '';
+      frameInfo.textContent   = `frame ${frameIdx} / ${bsData.frames.length - 1}`;
+    }
+
+    // Loop toggle
+    loopBtn.addEventListener('click', () => {
+      looping = !looping;
+      loopBtn.textContent = `Loop: ${looping ? 'ON' : 'OFF'}`;
+      loopBtn.classList.toggle('active', looping);
+    });
+
+    // Play / Pause
+    playBtn.addEventListener('click', () => {
+      if (!bsData) return;
+      isPlaying = !isPlaying;
+      if (isPlaying) {
+        lastPerfMs = performance.now();
+        playBtn.textContent = '⏸ Pause';
+        playBtn.classList.add('active');
+      } else {
+        playBtn.textContent = '▶ Play';
+        playBtn.classList.remove('active');
+      }
+    });
+
+    // Stop
+    stopBtn.addEventListener('click', () => {
+      isPlaying = false;
+      playT = 0;
+      lastFrameIdx = -1;
+      playBtn.textContent = '▶ Play';
+      playBtn.classList.remove('active');
+      if (bsData) {
+        if (expressionManager?.reset) expressionManager.reset();
+        morphBindMap.forEach(binds => binds.forEach(b => { b.target.influence = 0; }));
+        resetEyeBones();
+        applyHeadPose(null);
+        applyFrame(0);
+      }
+      timelineFill.style.width = '0%';
+      if (bsData) timeDisplay.textContent = '0:00.00 / ' + fmt(bsData.frames.length / bsData.fps);
+    });
+
+    // Timeline scrub
+    timelineEl.addEventListener('click', (e) => {
+      if (!bsData) return;
+      const rect = timelineEl.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      playT = ratio * (bsData.frames.length / bsData.fps);
+      lastFrameIdx = -1;
+    });
+
+    // ---------------------------------------------------------------------------
+    // Load JSON
+    // ---------------------------------------------------------------------------
+    function loadParsed(json, label) {
+      bsData = parseJSON(json);
+      jsonNameEl.textContent = label;
+      playT = 0; lastFrameIdx = -1; isPlaying = false;
+      playBtn.textContent = '▶ Play';
+      playBtn.classList.remove('active');
+      const dur = bsData.frames.length / bsData.fps;
+      exprDisplay.textContent =
+        `${bsData.frames.length} frames × ${bsData.shapeNames.length} shapes @ ${bsData.fps}fps  (${dur.toFixed(1)}s)`;
+      timeDisplay.textContent = '0:00.00 / ' + fmt(dur);
+      applyFrame(0);
+      setReady();
+    }
+
+    jsonFileIn.addEventListener('change', () => {
+      const file = jsonFileIn.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try { loadParsed(JSON.parse(e.target.result), file.name); }
+        catch (err) { exprDisplay.textContent = 'ERROR: ' + err.message; }
+      };
+      reader.readAsText(file);
+    });
+
+    // Auto-load default JSON
+    (async () => {
+      const candidates = [
+        { file: 'audio/test_expression_1s.json', label: 'test_expression_1s.json' },
+        { file: 'audio/a2f_sample.json',         label: 'a2f_sample.json' },
+      ];
+      for (const { file, label } of candidates) {
+        try {
+          const res = await fetch(file);
+          if (!res.ok) continue;
+          loadParsed(await res.json(), label);
+          return;
+        } catch (_) {}
+      }
+      exprDisplay.textContent = 'No default JSON found — load a file manually';
+      setReady();
+    })();
+
+    // ---------------------------------------------------------------------------
+    // Render loop — timer-based playback
+    // ---------------------------------------------------------------------------
+    scene.onBeforeRenderObservable.add(() => {
+      if (!bsData) return;
+
+      const now = performance.now();
+      if (isPlaying && lastPerfMs !== null) {
+        playT += (now - lastPerfMs) / 1000;
+        const dur = bsData.frames.length / bsData.fps;
+        if (playT >= dur) {
+          if (looping) { playT %= dur; }
+          else {
+            playT = dur;
+            isPlaying = false;
+            playBtn.textContent = '▶ Play';
+            playBtn.classList.remove('active');
+          }
+        }
+      }
+      lastPerfMs = now;
+
+      const dur = bsData.frames.length / bsData.fps;
+      timelineFill.style.width = ((playT / dur) * 100).toFixed(2) + '%';
+      timeDisplay.textContent  = fmt(playT) + ' / ' + fmt(dur);
+
+      const frameIdx = Math.min(bsData.frames.length - 1, Math.floor(playT * bsData.fps));
+      if (frameIdx === lastFrameIdx) return;
+      lastFrameIdx = frameIdx;
+      applyFrame(frameIdx);
+    });
+
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener('resize', () => engine.resize());
+
+  </script>
+</body>
+</html>

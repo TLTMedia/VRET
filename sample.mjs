@@ -69,7 +69,7 @@ const browser = await puppeteer.launch({
 });
 
 const VRMA        = 'vrma/02_01.vrma';
-const AFRAME_URL  = `http://localhost:${PORT}/animate.html?model=models/AIAN/AIAN_F_1_Casual_CLEANED.vrm#${VRMA}`;
+const AFRAME_URL  = `http://localhost:${PORT}/animate.html?model=models/AIAN/AIAN_F_1_Casual.vrm#${VRMA}`;
 const BABYLON_URL = `http://localhost:${PORT}/babvrm.html#${VRMA}`;
 
 const afPage  = await browser.newPage();

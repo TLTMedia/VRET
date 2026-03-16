@@ -1,0 +1,89 @@
+
+======================================================================
+SUMMARY  (FILES WRITTEN)
+======================================================================
+  Patched (expressions fixed):  122
+  No change needed:             0
+  Skipped — 0-byte empty file:  77
+  Skipped — parse error:        0
+  Skipped — no face mesh:       0
+  Skipped — unknown shape tier: 0
+
+0-BYTE FILES (need vrm_cleanup_enhanced.py re-run):
+  Hispanic/Hispanic_M_3_Busi_CLEANED.vrm
+  Hispanic/Hispanic_M_3_Casual_CLEANED.vrm
+  Hispanic/Hispanic_M_3_Default_CLEANED.vrm
+  Hispanic/Hispanic_M_3_Medi_CLEANED.vrm
+  Hispanic/Hispanic_M_3_Milit_CLEANED.vrm
+  Hispanic/Hispanic_M_3_Util_CLEANED.vrm
+  MENA/MENA_F_1_Busi_CLEANED.vrm
+  MENA/MENA_F_1_Casual_CLEANED.vrm
+  MENA/MENA_F_1_Medi_CLEANED.vrm
+  MENA/MENA_F_1_Milit_CLEANED.vrm
+  MENA/MENA_F_1_Util_CLEANED.vrm
+  MENA/MENA_F_2_Busi_CLEANED.vrm
+  MENA/MENA_F_2_Casual_CLEANED.vrm
+  MENA/MENA_F_2_Medi_CLEANED.vrm
+  MENA/MENA_F_2_Milit_CLEANED.vrm
+  MENA/MENA_F_2_Util_CLEANED.vrm
+  MENA/MENA_M_1_Busi_CLEANED.vrm
+  MENA/MENA_M_1_Casual_CLEANED.vrm
+  MENA/MENA_M_1_Medi_CLEANED.vrm
+  MENA/MENA_M_1_Milit_CLEANED.vrm
+  MENA/MENA_M_1_Util_CLEANED.vrm
+  MENA/MENA_M_2_Busi_CLEANED.vrm
+  MENA/MENA_M_2_Casual_CLEANED.vrm
+  MENA/MENA_M_2_Medi_CLEANED.vrm
+  MENA/MENA_M_2_Milit_CLEANED.vrm
+  MENA/MENA_M_2_Util_CLEANED.vrm
+  MENA/MENA_M_3_Busi_CLEANED.vrm
+  MENA/MENA_M_3_Casual_CLEANED.vrm
+  MENA/MENA_M_3_Medi_CLEANED.vrm
+  MENA/MENA_M_3_Milit_CLEANED.vrm
+  MENA/MENA_M_3_Util_CLEANED.vrm
+  NHPI/NHPI_M_1_Busi_CLEANED.vrm
+  NHPI/NHPI_M_1_Casual_CLEANED.vrm
+  NHPI/NHPI_M_1_Medi_CLEANED.vrm
+  NHPI/NHPI_M_1_Milit_CLEANED.vrm
+  NHPI/NHPI_M_1_Util_CLEANED.vrm
+  NHPI/NHPI_M_2_Busi_CLEANED.vrm
+  NHPI/NHPI_M_2_Casual_CLEANED.vrm
+  NHPI/NHPI_M_2_Medi_CLEANED.vrm
+  NHPI/NHPI_M_2_Milit_CLEANED.vrm
+  NHPI/NHPI_M_2_Util_CLEANED.vrm
+  White/White_F_1_Busi_CLEANED.vrm
+  White/White_F_1_Casual_CLEANED.vrm
+  White/White_F_1_Default_CLEANED.vrm
+  White/White_F_1_Medi_CLEANED.vrm
+  White/White_F_1_Milit_CLEANED.vrm
+  White/White_F_1_Util_CLEANED.vrm
+  White/White_F_2_Busi_CLEANED.vrm
+  White/White_F_2_Casual_CLEANED.vrm
+  White/White_F_2_Default_CLEANED.vrm
+  White/White_F_2_Medi_CLEANED.vrm
+  White/White_F_2_Milit_CLEANED.vrm
+  White/White_F_2_Util_CLEANED.vrm
+  White/White_F_3_Busi_CLEANED.vrm
+  White/White_F_3_Casual_CLEANED.vrm
+  White/White_F_3_Default_CLEANED.vrm
+  White/White_F_3_Medi_CLEANED.vrm
+  White/White_F_3_Milit_CLEANED.vrm
+  White/White_F_3_Util_CLEANED.vrm
+  White/White_M_1_Busi_CLEANED.vrm
+  White/White_M_1_Casual_CLEANED.vrm
+  White/White_M_1_Default_CLEANED.vrm
+  White/White_M_1_Medi_CLEANED.vrm
+  White/White_M_1_Milit_CLEANED.vrm
+  White/White_M_1_Util_CLEANED.vrm
+  White/White_M_2_Busi_CLEANED.vrm
+  White/White_M_2_Casual_CLEANED.vrm
+  White/White_M_2_Default_CLEANED.vrm
+  White/White_M_2_Medi_CLEANED.vrm
+  White/White_M_2_Milit_CLEANED.vrm
+  White/White_M_2_Util_CLEANED.vrm
+  White/White_M_3_Busi_CLEANED.vrm
+  White/White_M_3_Casual_CLEANED.vrm
+  White/White_M_3_Default_CLEANED.vrm
+  White/White_M_3_Medi_CLEANED.vrm
+  White/White_M_3_Milit_CLEANED.vrm
+  White/White_M_3_Util_CLEANED.vrm

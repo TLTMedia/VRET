@@ -40,7 +40,7 @@
 <script>
     AFRAME.registerComponent('viseme-tester', {
         schema: {
-            vrm: { type: 'string', default: 'models/AIAN/AIAN_F_1_Casual_CLEANED.vrm' },
+            vrm: { type: 'string', default: 'models/AIAN/AIAN_F_1_Casual.vrm' },
             duration: { type: 'number', default: 1.5 } // Seconds per viseme
         },
 
@@ -170,7 +170,7 @@
     <!-- Avatar with Viseme Tester Component -->
     <a-entity 
         id="avatar"
-        viseme-tester="vrm: models/AIAN/AIAN_F_1_Casual_CLEANED.vrm; duration: 1.5"
+        viseme-tester="vrm: models/AIAN/AIAN_F_1_Casual.vrm; duration: 1.5"
         position="0 0 0" 
         rotation="0 180 0"
         shadow="cast: true">
