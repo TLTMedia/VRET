@@ -38,8 +38,7 @@
     BABYLON.TransformNode.prototype.getTotalVertices ??= function() { return 0; };
 
     const params = new URLSearchParams(window.location.search);
-    const VRM_FILE  = params.get('model') ||
-      'https://raw.githubusercontent.com/vrm-c/vrm-specification/master/samples/VRM1_Constraint_Twist_Sample/vrm/VRM1_Constraint_Twist_Sample.vrm';
+    const VRM_FILE  = params.get('model') || 'models/Seed-san.vrm';
     // VRMA from hash (e.g. babvrm_spring.html#vrma/13_29.vrma), else random
     const HASH_VRMA = location.hash.slice(1) || null;
 
