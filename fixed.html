@@ -17,7 +17,7 @@
 
     // ── fixed.js (inline, export removed for browser compatibility) ──────────
 
-    const GITHUB_RAW = 'https://raw.githubusercontent.com/SBUtltmedia/VRE/babvrm';
+    const GITHUB_RAW = 'https://raw.githubusercontent.com/TLTMedia/VRET/babvrm';
 
     // Load babylon-vrm-loader (community), then vrm1-loader (our VRM 1.0 extension)
     const _vrmLoaderReady = new Promise((resolve, reject) => {
@@ -27,7 +27,7 @@
             const s2 = document.createElement('script');
             s2.src = GITHUB_RAW + '/vrm1-loader.js';
             s2.onload = resolve;
-            s2.onerror = reject;
+            s2.onerror = e => { console.warn('vrm1-loader.js failed to load (VRM 1.0 may be unsupported)', e); resolve(); };
             document.head.appendChild(s2);
         };
         s.onerror = reject;
