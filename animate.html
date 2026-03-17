@@ -301,7 +301,7 @@ AFRAME.registerComponent('leg-fixer', {
     <a-entity light="type: directional; intensity: 0.8; castShadow: true;" position="2 4 2"></a-entity>
 
     <!-- Camera -->
-    <a-entity position="0 1.6 1">
+    <a-entity id="cameraRig" position="0 1.6 1">
         <a-camera></a-camera>
     </a-entity>
 </a-scene>
@@ -311,6 +311,46 @@ AFRAME.registerComponent('leg-fixer', {
 setTimeout(() => {
     document.getElementById('avatar').setAttribute('vrm', 'src', randomModel);
 }, 100);
+
+// External sync API: theta=0 = front of avatar (camera on +Z side of avatar at world z=-4)
+// phi = elevation above horizon, radius = distance
+const AVATAR_Z = -4;
+window.setCameraOrbit = (theta, phi, radius, targetY) => {
+    const sceneEl = document.querySelector('a-scene');
+    const camEl   = document.querySelector('[camera]');
+    const cam3    = sceneEl?.camera;  // actual THREE.PerspectiveCamera
+    const rig     = document.getElementById('cameraRig');
+    if (!cam3 || !camEl || !rig) return;
+    // Strip controls permanently — external orbit takes over
+    if (camEl.components['look-controls']) camEl.removeAttribute('look-controls');
+    if (camEl.components['wasd-controls']) camEl.removeAttribute('wasd-controls');
+    // Position rig at orbit point; all sub-entities stay at local origin
+    // Avatar faces -Z in A-Frame (two-vrm applies 180°Y + entity rotation="0 180 0" = 360° = -Z facing)
+    // Camera must be on -Z side: z = AVATAR_Z - radius (not + radius)
+    const cosPhi = Math.cos(phi);
+    const x = radius * cosPhi * Math.sin(theta);
+    const y = targetY + radius * Math.sin(phi);
+    const z = AVATAR_Z - radius * cosPhi * Math.cos(theta);
+    rig.object3D.position.set(x, y, z);
+    rig.object3D.quaternion.identity();
+    camEl.object3D.position.set(0, 0, 0);
+    camEl.object3D.quaternion.identity();
+    cam3.position.set(0, 0, 0);
+    cam3.lookAt(0, targetY, AVATAR_Z);
+    // Match Babylon ArcRotateCamera default FOV (0.8 rad ≈ 45.8°)
+    cam3.fov = 0.8 * (180 / Math.PI);
+    cam3.updateProjectionMatrix();
+    cam3.updateMatrixWorld(true);
+};
+window.getCameraOrbit = () => {
+    const rig = document.getElementById('cameraRig');
+    if (!rig?.object3D) return null;
+    const p = rig.object3D.position;
+    const dx = p.x, dy = p.y - 0.9, dz = p.z - AVATAR_Z;
+    const radius = Math.sqrt(dx*dx + dy*dy + dz*dz);
+    // z = AVATAR_Z - radius * cos(theta) → -(z-AVATAR_Z) = radius * cos(theta)
+    return { theta: Math.atan2(dx, -(p.z - AVATAR_Z)), phi: Math.asin(dy / (radius || 1)), radius, targetY: 0.9 };
+};
 
 // Cap pixel ratio to 1 (no HiDPI supersampling) to keep GPU load reasonable
 document.querySelector('a-scene').addEventListener('renderstart', () => {

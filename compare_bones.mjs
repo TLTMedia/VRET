@@ -32,14 +32,23 @@ const server = createServer(async (req, res) => {
 });
 
 await new Promise(r => server.listen(PORT, r));
-console.log(`
-🌐 http://localhost:${PORT}
-`);
+console.log(`🌐 http://localhost:${PORT}`);
 
-const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+const browser = await puppeteer.launch({
+  headless: true,
+  protocolTimeout: 120_000,
+  args: ['--no-sandbox', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'],
+});
 
-const AFRAME_URL  = `http://localhost:${PORT}/animate.html?model=models/AIAN/AIAN_F_1_Casual.vrm#vrma/40_11.vrma`;
-const BABYLON_URL = `http://localhost:${PORT}/babvrm.html#vrma/40_11.vrma`;
+const AFRAME_URL  = `http://localhost:${PORT}/animate.html?model=models/Seed-san.vrm#vrma/40_11.vrma`;
+const BABYLON_URL = `http://localhost:${PORT}/babvrm_node_constraint.html?model=models/Seed-san.vrm#vrma/40_11.vrma`;
+
+// Robo-arm constraint target bones — driven by VRMC_node_constraint, not animation
+const ROBO_BONES = [
+  'robo_shoulder.L', 'robo_upper_arm.L', 'robo_forearm.L', 'robo_hand.L',
+  'robo_f_index.01.L', 'robo_f_index.02.L', 'robo_f_index.03.L',
+  'robo_thumb.01.L',  'robo_thumb.02.L',   'robo_thumb.03.L',
+];
 
 const [afPage, babPage] = await Promise.all([
   browser.newPage(),
@@ -59,18 +68,18 @@ await Promise.all([
 ]);
 
 console.log('Waiting for animations to load…');
-await Promise.all([
-  afPage.waitForFunction(() => window.animationReady === true, { timeout: 60_000 }),
-  babPage.waitForFunction(() => window.animationReady === true, { timeout: 60_000 }),
-]);
+await afPage.bringToFront();
+await afPage.waitForFunction(() => window.animationReady === true, { timeout: 60_000 });
+await babPage.bringToFront();
+await babPage.waitForFunction(() => window.animationReady === true, { timeout: 60_000 });
 
 for (const t of SAMPLE_TIMES) {
   console.log(`
 --- Time: ${t}s ---`);
 
   const [afQuats, babQuats] = await Promise.all([
-    afPage.evaluate( t => window.getBoneQuats(t), t),
-    babPage.evaluate(t => window.getBoneQuats(t), t),
+    afPage.evaluate( (t, rb) => window.getBoneQuats(t, rb), t, ROBO_BONES),
+    babPage.evaluate((t, rb) => window.getBoneQuats(t, rb), t, ROBO_BONES),
   ]);
 
   if (!afQuats || !babQuats) {
@@ -87,13 +96,19 @@ for (const t of SAMPLE_TIMES) {
         continue;
     }
 
-    const dot = Math.abs(aq.x * bq.x + aq.y * bq.y + aq.z * bq.z + aq.w * bq.w);
+    // Robo constraint bones are non-humanoid locals — apply LHS→RHS correction
+    // (negate X and Z) before dotting, same as the VRMA quaternion conversion.
+    const isRobo = ROBO_BONES.includes(bone);
+    const bx = isRobo ? -bq.x : bq.x;
+    const bz = isRobo ? -bq.z : bq.z;
+    const dot = Math.abs(aq.x * bx + aq.y * bq.y + aq.z * bz + aq.w * bq.w);
     const diff = (1 - dot).toFixed(6);
-    
+    const tag  = isRobo ? ' [robo]' : '';
+
     if (dot < 0.999) {
-        console.log(`Bone ${bone.padEnd(15)}: DIFF=${diff} | AF: [${aq.x}, ${aq.y}, ${aq.z}, ${aq.w}] | BAB: [${bq.x}, ${bq.y}, ${bq.z}, ${bq.w}]`);
+        console.log(`Bone ${bone.padEnd(20)}${tag}: DIFF=${diff} | AF: [${aq.x}, ${aq.y}, ${aq.z}, ${aq.w}] | BAB: [${bq.x}, ${bq.y}, ${bq.z}, ${bq.w}]`);
     } else {
-        // console.log(`Bone ${bone.padEnd(15)}: OK`);
+        // console.log(`Bone ${bone.padEnd(20)}${tag}: OK`);
     }
   }
 }

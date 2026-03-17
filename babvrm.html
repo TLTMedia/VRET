@@ -121,6 +121,20 @@
     camera.lowerRadiusLimit = 0.5;
     camera.upperRadiusLimit = 15;
 
+    // External sync API: theta=0 is front (alpha=π/2), phi is elevation above horizon
+    window.setCameraOrbit = (theta, phi, radius, targetY) => {
+      camera.alpha   = theta + Math.PI / 2;
+      camera.beta    = Math.PI / 2 - phi;
+      camera.radius  = radius;
+      camera.target.y = targetY;
+    };
+    window.getCameraOrbit = () => ({
+      theta:   camera.alpha - Math.PI / 2,
+      phi:     Math.PI / 2 - camera.beta,
+      radius:  camera.radius,
+      targetY: camera.target.y,
+    });
+
     new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
     const dirLight = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-1, -2, -1), scene);
     dirLight.intensity = 0.5;

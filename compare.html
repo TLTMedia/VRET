@@ -27,7 +27,7 @@
       <option value="models/AIAN/AIAN_F_1_Casual.vrm">AIAN F1</option>
       <option value="models/White/White_M_1_Casual.vrm">White M1</option>
       <option value="models/Hispanic/Hispanic_M_3_Casual.vrm">Hispanic M3</option>
-      <option value="models/Seed-san.vrm">Seed-san (VRM 1.0)</option>
+      <option value="models/Seed-san.vrm" selected>Seed-san (VRM 1.0)</option>
     </select>
     <button id="goBtn">Load</button>
     <span id="readyState" style="color:#666">●● loading…</span>
@@ -65,7 +65,10 @@
       });
     }
 
-    fetch('animations.json').then(r => r.json()).then(populateSelect).catch(() => populateSelect(FALLBACK_VRMAS));
+    fetch('animations.json').then(r => r.json()).then(list => {
+      populateSelect(list);
+      sel.selectedIndex = Math.floor(Math.random() * list.length);
+    }).catch(() => populateSelect(FALLBACK_VRMAS));
 
     let pollTimer = null;
 
@@ -85,7 +88,12 @@
       pollTimer = setInterval(() => {
         try { if (!afOk  && document.getElementById('afFrame').contentWindow.animationReady)  { afOk  = true; document.getElementById('paneAf').classList.add('ready');  } } catch(e) {}
         try { if (!babOk && document.getElementById('babFrame').contentWindow.animationReady) { babOk = true; document.getElementById('paneBab').classList.add('ready'); } } catch(e) {}
-        if (afOk && babOk) { clearInterval(pollTimer); rs.style.color = '#4f4'; rs.textContent = '●● both ready'; }
+        if (afOk && babOk) {
+          clearInterval(pollTimer); rs.style.color = '#4f4'; rs.textContent = '●● both ready';
+          // Align starting camera: theta=0 (front), phi=0.12 (slight elevation), r=5, targetY=0.9
+          try { document.getElementById('afFrame').contentWindow.setCameraOrbit(0, 0.12, 5, 0.9); } catch(e) {}
+          try { document.getElementById('babFrame').contentWindow.setCameraOrbit(0, 0.12, 5, 0.9); } catch(e) {}
+        }
         else if (afOk)     rs.textContent = '● A-Frame ready, waiting Babylon…';
         else if (babOk)    rs.textContent = '● Babylon ready, waiting A-Frame…';
       }, 500);
