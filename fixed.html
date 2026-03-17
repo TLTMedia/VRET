@@ -17,11 +17,19 @@
 
     // ── fixed.js (inline, export removed for browser compatibility) ──────────
 
-    // Start loading the VRM loader immediately (parallel with createScene setup)
+    const GITHUB_RAW = 'https://raw.githubusercontent.com/SBUtltmedia/VRE/babvrm';
+
+    // Load babylon-vrm-loader (community), then vrm1-loader (our VRM 1.0 extension)
     const _vrmLoaderReady = new Promise((resolve, reject) => {
         const s = document.createElement('script');
         s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
-        s.onload = resolve;
+        s.onload = () => {
+            const s2 = document.createElement('script');
+            s2.src = GITHUB_RAW + '/vrm1-loader.js';
+            s2.onload = resolve;
+            s2.onerror = reject;
+            document.head.appendChild(s2);
+        };
         s.onerror = reject;
         document.head.appendChild(s);
     });
@@ -37,8 +45,8 @@
 
         new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0, 1, 0), scene);
 
-        var vrmFile  = 'https://raw.githubusercontent.com/vrm-c/vrm-specification/master/samples/VRM1_Constraint_Twist_Sample/vrm/VRM1_Constraint_Twist_Sample.vrm';
-        var vrmaFile = 'https://raw.githubusercontent.com/not-elm/bevy_vrm1/main/assets/vrma/VRMA_01.vrma';
+        var vrmFile  = GITHUB_RAW + '/models/Seed-san.vrm';
+        var vrmaFile = GITHUB_RAW + '/vrma/02_01.vrma';
 
         await _vrmLoaderReady;
 
