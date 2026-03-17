@@ -1,0 +1,292 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Babylon.js VRM+VRMA (Node Constraints)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <script src="https://preview.babylonjs.com/babylon.js"></script>
+  <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+  <style>
+    html, body, #renderCanvas { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #001a33; }
+    #ui {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      font: 13px monospace; color: #fff; text-align: center; pointer-events: none;
+    }
+    #description { max-width: 480px; opacity: 0.9; text-shadow: 0 1px 3px #000; }
+    #btn {
+      pointer-events: all; padding: 6px 18px; background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.4); color: #fff; border-radius: 4px;
+      cursor: pointer; font: 13px monospace;
+    }
+    #btn:hover { background: rgba(255,255,255,0.3); }
+    #status { opacity: 0.6; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+  <div id="ui">
+    <div id="description">Loading…</div>
+    <button id="btn">⟳ Random animation</button>
+    <div id="status"></div>
+  </div>
+  <script type="module">
+    BABYLON.TransformNode.prototype.getTotalVertices ??= function() { return 0; };
+
+    const params    = new URLSearchParams(window.location.search);
+    const VRM_FILE  = params.get('model') || 'models/Seed-san.vrm';
+    const HASH_VRMA = location.hash.slice(1) || null;
+
+    window.animationReady = false;
+
+    const descEl   = document.getElementById('description');
+    const statusEl = document.getElementById('status');
+    const btn      = document.getElementById('btn');
+
+    // -------------------------------------------------------------------------
+    // Load VRM loader + animations list in parallel
+    // -------------------------------------------------------------------------
+    const [, animations] = await Promise.all([
+      new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      }),
+      fetch('animations.json').then(r => r.json()),
+    ]);
+
+    console.log(`[animations.json] ${animations.length} entries`);
+
+    // -------------------------------------------------------------------------
+    // Scene
+    // -------------------------------------------------------------------------
+    const canvas = document.getElementById('renderCanvas');
+    const engine = new BABYLON.Engine(canvas, true);
+    engine.setHardwareScalingLevel(1);
+    const scene  = new BABYLON.Scene(engine);
+
+    const camera = new BABYLON.ArcRotateCamera('cam', Math.PI / 2, Math.PI / 2 - 0.12, 5,
+      new BABYLON.Vector3(0, 0.9, 0), scene);
+    camera.attachControl(canvas, true);
+    camera.lowerRadiusLimit = 0.5;
+    camera.upperRadiusLimit = 15;
+
+    new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
+    const dirLight = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-1, -2, -1), scene);
+    dirLight.intensity = 0.5;
+
+    // -------------------------------------------------------------------------
+    // VRMC_node_constraint solver
+    //
+    // VRM 1.0 spec — rotation constraint formula:
+    //   A = restTargetLocalRot          (captured at T-pose)
+    //   B = inv(restSourceWorldRot)     (captured at T-pose)
+    //   targetLocalRot = A * slerp(Identity, B * sourceWorldRot, weight)
+    //
+    // Supports: rotation (weight blended).
+    // aim / roll are logged as warnings if encountered.
+    // -------------------------------------------------------------------------
+    // Walk the quaternion chain up to root — deliberately ignores scale so that
+    // __root__'s scale(-1,1,1) (the LHS handedness flip) does not corrupt the
+    // rotation extracted via matrix decomposition.
+    function worldQuat(node) {
+      const chain = [];
+      let n = node;
+      while (n) {
+        chain.unshift(n.rotationQuaternion?.clone() ?? BABYLON.Quaternion.Identity());
+        n = n.parent;
+      }
+      return chain.reduce((acc, q) => acc.multiply(q), BABYLON.Quaternion.Identity());
+    }
+
+    async function buildNodeConstraints(vrmUrl) {
+      // Fetch the VRM binary and parse its JSON chunk
+      const buf     = await fetch(vrmUrl).then(r => r.arrayBuffer());
+      const view    = new DataView(buf);
+      const jsonLen = view.getUint32(12, true);
+      const gltf    = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jsonLen)));
+      const nodes   = gltf.nodes ?? [];
+
+      const constraints = [];
+      for (let i = 0; i < nodes.length; i++) {
+        const nc = nodes[i].extensions?.VRMC_node_constraint?.constraint;
+        if (!nc) continue;
+
+        const type = Object.keys(nc)[0]; // 'rotation' | 'aim' | 'roll'
+        if (type !== 'rotation') {
+          console.warn(`[NodeConstraint] unsupported type "${type}" on node "${nodes[i].name}" — skipped`);
+          continue;
+        }
+
+        const { source: srcIdx, weight = 1 } = nc[type];
+        const targetNode = scene.getNodeByName(nodes[i].name);
+        const sourceNode = scene.getNodeByName(nodes[srcIdx].name);
+
+        if (!targetNode || !sourceNode) {
+          console.warn(`[NodeConstraint] could not find scene nodes for "${nodes[i].name}" or "${nodes[srcIdx].name}"`);
+          continue;
+        }
+
+        // Capture rest poses now (model is in T-pose, no animation applied yet)
+        const restTargetLocal  = (targetNode.rotationQuaternion ?? BABYLON.Quaternion.Identity()).clone();
+        const restSourceWorldInv = BABYLON.Quaternion.Inverse(worldQuat(sourceNode));
+
+        constraints.push({ targetNode, sourceNode, restTargetLocal, restSourceWorldInv, weight });
+      }
+
+      console.log(`[NodeConstraint] ${constraints.length} rotation constraints registered`);
+      return constraints;
+    }
+
+    // -------------------------------------------------------------------------
+    // Load VRM
+    // -------------------------------------------------------------------------
+    descEl.textContent = 'Loading VRM…';
+    await BABYLON.ImportMeshAsync(VRM_FILE, scene);
+    const vrmManager = scene.metadata?.vrmManagers?.[0];
+    if (!vrmManager) throw new Error('VRM manager not found');
+
+    // Parse VRMC_node_constraint from the VRM file and register the solver
+    const nodeConstraints = await buildNodeConstraints(VRM_FILE);
+    if (nodeConstraints.length > 0) {
+      scene.onBeforeRenderObservable.add(() => {
+        for (const c of nodeConstraints) {
+          const srcWorld = worldQuat(c.sourceNode);
+          // delta = inv(restSourceWorld) * sourceWorldNow
+          const delta = c.restSourceWorldInv.multiply(srcWorld);
+          // weighted delta
+          const w = c.weight >= 1
+            ? delta
+            : BABYLON.Quaternion.Slerp(BABYLON.Quaternion.Identity(), delta, c.weight);
+          // targetLocal = restTargetLocal * weightedDelta
+          c.targetNode.rotationQuaternion = c.restTargetLocal.multiply(w);
+        }
+      });
+    }
+
+    // Spring bones (VRM 1.0: springBoneController10, VRM 0.x: springBoneController)
+    const springController = vrmManager.springBoneController10 ?? vrmManager.springBoneController ?? null;
+    if (springController) {
+      console.log('[Spring bones] controller found:', springController.constructor?.name ?? 'unknown');
+      let _lastMs = performance.now();
+      scene.onBeforeRenderObservable.add(() => {
+        const now = performance.now();
+        const dt  = Math.min((now - _lastMs) / 1000, 0.05);
+        _lastMs   = now;
+        springController.update(dt);
+      });
+    }
+
+    const vrmHipsBone     = vrmManager.humanoidBone['hips'];
+    const vrmLeftFootBone = vrmManager.humanoidBone['leftFoot'];
+    const vrmRootMesh     = scene.rootNodes?.find(n => n.name === '__root__') ?? scene.meshes?.[0];
+    const vrmAvatar       = new BABYLON.AnimatorAvatar('vrm-avatar', vrmRootMesh);
+
+    // -------------------------------------------------------------------------
+    // playAnimation
+    // -------------------------------------------------------------------------
+    let currentGroup     = null;
+    let currentContainer = null;
+
+    async function playAnimation(entry) {
+      btn.disabled = true;
+      statusEl.textContent = 'loading…';
+      descEl.textContent   = entry.description;
+
+      if (currentGroup)     { currentGroup.stop(); currentGroup.dispose(); currentGroup = null; }
+      if (currentContainer) { currentContainer.dispose(); currentContainer = null; }
+      if (scene.metadata?.vrmAnimationManagers) scene.metadata.vrmAnimationManagers = [];
+
+      const assetContainer = await BABYLON.LoadAssetContainerAsync(entry.url, scene);
+      currentContainer = assetContainer;
+      const vrmAnimManager = scene.metadata?.vrmAnimationManagers?.[0];
+      const animGroup      = assetContainer.animationGroups[0];
+
+      if (!vrmAnimManager?.animationMap || !animGroup) {
+        statusEl.textContent = 'failed — no animation data';
+        btn.disabled = false;
+        return;
+      }
+
+      const mapNodeNames = new Map();
+      animGroup.targetedAnimations.forEach((targeted, i) => {
+        const boneName = vrmAnimManager.animationMap.get(i);
+        const bone     = vrmManager.humanoidBone[boneName];
+        if (bone && targeted.target?.name) mapNodeNames.set(targeted.target.name, bone.name);
+      });
+
+      const remapped = vrmAvatar.retargetAnimationGroup(animGroup, {
+        animationGroupName:      'vrma-remapped',
+        fixRootPosition:         true,
+        rootNodeName:            vrmHipsBone.name,
+        groundReferenceNodeName: vrmLeftFootBone?.name,
+        mapNodeNames,
+      });
+
+      remapped.start(true, 1.0, remapped.from, remapped.to, false);
+      remapped.goToFrame(remapped.from);
+      scene.render();
+      currentGroup = remapped;
+
+      window.scene          = scene;
+      window.remappedGroup  = remapped;
+      window.animationReady = true;
+
+      window.getBoneQuats = function(t, extraBones = []) {
+        if (!window.remappedGroup || !window.scene) return null;
+        const fps = window.remappedGroup.targetedAnimations[0]?.animation?.framePerSecond ?? 60;
+        window.remappedGroup.goToFrame(t * fps);
+        if (springController) for (let i = 0; i < 5; i++) springController.update(0.016);
+        window.scene.render();
+        const mgr = window.scene.metadata?.vrmManagers?.[0];
+        if (!mgr) return null;
+        const result = {};
+        const nm = mgr.humanoidBone?.nodeMap ?? {};
+        for (const [name, bone] of Object.entries(nm)) {
+          const q = bone?.rotationQuaternion;
+          if (q) result[name] = { x: +q.x.toFixed(4), y: +q.y.toFixed(4), z: +q.z.toFixed(4), w: +q.w.toFixed(4) };
+        }
+        for (const name of extraBones) {
+          const node = window.scene.getNodeByName(name);
+          const q = node?.rotationQuaternion;
+          if (q) result[name] = { x: +q.x.toFixed(4), y: +q.y.toFixed(4), z: +q.z.toFixed(4), w: +q.w.toFixed(4) };
+        }
+        return result;
+      };
+
+      statusEl.textContent = entry.url;
+      btn.disabled = false;
+      console.log('[Done]', entry.url, '— tracks:', remapped.targetedAnimations.length);
+    }
+
+    // -------------------------------------------------------------------------
+    // Random picker
+    // -------------------------------------------------------------------------
+    let lastIdx = -1;
+    function pickRandom() {
+      let idx;
+      do { idx = Math.floor(Math.random() * animations.length); } while (idx === lastIdx);
+      lastIdx = idx;
+      return animations[idx];
+    }
+
+    btn.addEventListener('click', () => playAnimation(pickRandom()));
+
+    const firstEntry = HASH_VRMA
+      ? (animations.find(a => a.url === HASH_VRMA) ?? { url: HASH_VRMA, description: HASH_VRMA })
+      : pickRandom();
+    await playAnimation(firstEntry);
+
+    document.getElementById('ui').style.display = '';
+
+    let _lastRender = 0;
+    engine.runRenderLoop(() => {
+      const now = performance.now();
+      if (now - _lastRender >= 33) { _lastRender = now; scene.render(); }
+    });
+    window.addEventListener('resize', () => engine.resize());
+
+  </script>
+</body>
+</html>
