@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>fixed.js — VRMA in Babylon.js</title>
+  <style>
+    html, body, #renderCanvas { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+  </style>
+  <script src="https://preview.babylonjs.com/babylon.js"></script>
+  <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+  <script>
+    const canvas = document.getElementById('renderCanvas');
+    const engine = new BABYLON.Engine(canvas, true);
+
+    // ── fixed.js (inline, export removed for browser compatibility) ──────────
+
+    // Start loading the VRM loader immediately (parallel with createScene setup)
+    const _vrmLoaderReady = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+
+    var createScene = async function() {
+        var scene = new BABYLON.Scene(engine);
+
+        // VRM avatar faces -Z in Babylon after the loader's 180°Y root correction.
+        // Camera at z=-3 (on the -Z side) looking toward +Z sees the front.
+        var camera = new BABYLON.FreeCamera("camera", new BABYLON.Vector3(0, 1.2, -3), scene);
+        camera.setTarget(new BABYLON.Vector3(0, 1.2, 0));
+        camera.attachControl(canvas, true);
+
+        new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0, 1, 0), scene);
+
+        var vrmFile  = 'https://raw.githubusercontent.com/vrm-c/vrm-specification/master/samples/VRM1_Constraint_Twist_Sample/vrm/VRM1_Constraint_Twist_Sample.vrm';
+        var vrmaFile = 'https://raw.githubusercontent.com/not-elm/bevy_vrm1/main/assets/vrma/VRMA_01.vrma';
+
+        await _vrmLoaderReady;
+
+        await BABYLON.ImportMeshAsync(vrmFile, scene);
+        const vrmManager = scene.metadata?.vrmManagers?.[0];
+        if (!vrmManager) { console.error('VRM manager not found'); return scene; }
+
+        const assetContainer = await BABYLON.LoadAssetContainerAsync(vrmaFile, scene);
+        const vrmAnimManager = scene.metadata?.vrmAnimationManagers?.[0];
+        const animGroup      = assetContainer.animationGroups[0];
+
+        if (!vrmAnimManager?.animationMap || !animGroup) {
+            console.error('No animation data found');
+            return scene;
+        }
+
+        const newAnimationGroup = new BABYLON.AnimationGroup("vrma-retargeted");
+
+        animGroup.targetedAnimations.forEach((targeted, i) => {
+            const boneName = vrmAnimManager.animationMap.get(i);
+            if (!boneName) return;
+
+            const bone = vrmManager.humanoidBone[boneName]
+                      ?? vrmManager.humanoidBone?.nodeMap?.[boneName];
+            if (!bone) return;
+
+            const anim = targeted.animation.clone(targeted.animation.name + '_retargeted');
+
+            if (anim.targetProperty === 'rotationQuaternion') {
+                // VRMA quaternions are in glTF right-handed space.
+                // Babylon is left-handed; __root__ carries 180°Y.
+                // Conjugating by 180°Y maps (x,y,z,w) → (-x, y, -z, w).
+                anim.getKeys().forEach(kf => {
+                    const q = kf.value;
+                    kf.value = new BABYLON.Quaternion(-q.x, q.y, -q.z, q.w);
+                });
+            } else if (anim.targetProperty === 'position') {
+                // Same handedness flip for hips translation.
+                anim.getKeys().forEach(kf => {
+                    const v = kf.value;
+                    kf.value = new BABYLON.Vector3(-v.x, v.y, -v.z);
+                });
+            }
+
+            newAnimationGroup.addTargetedAnimation(anim, bone);
+        });
+
+        newAnimationGroup.start(true, 1.0, newAnimationGroup.from, newAnimationGroup.to, false);
+
+        window.animationReady = true;
+        return scene;
+    };
+
+    // ── Playground boilerplate ────────────────────────────────────────────────
+    createScene().then(scene => {
+        engine.runRenderLoop(() => scene.render());
+    });
+    window.addEventListener('resize', () => engine.resize());
+  </script>
+</body>
+</html>
