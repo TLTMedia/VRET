@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Babylon.js VRM+VRMA</title>
+  <title>Babylon.js VRM+VRMA (Spring)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <script src="https://preview.babylonjs.com/babylon.js"></script>
   <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
@@ -38,50 +38,12 @@
     BABYLON.TransformNode.prototype.getTotalVertices ??= function() { return 0; };
 
     const params = new URLSearchParams(window.location.search);
-    const VRM_FILE  = params.get('model') || 'models/AIAN/AIAN_F_1_Casual.vrm';
-    // VRMA from hash (e.g. babvrm.html#vrma/13_29.vrma), else random
+    const VRM_FILE  = params.get('model') ||
+      'https://raw.githubusercontent.com/vrm-c/vrm-specification/master/samples/VRM1_Constraint_Twist_Sample/vrm/VRM1_Constraint_Twist_Sample.vrm';
+    // VRMA from hash (e.g. babvrm_spring.html#vrma/13_29.vrma), else random
     const HASH_VRMA = location.hash.slice(1) || null;
 
     window.animationReady = false;
-
-    // ---------------------------------------------------------------------------
-    // VRM humanoid bone parent map (VRM spec / three-vrm VRMHumanBoneParentMap)
-    // ---------------------------------------------------------------------------
-    const BONE_PARENT = {
-      hips: null,
-      spine: 'hips', chest: 'spine', upperChest: 'chest',
-      neck: 'upperChest', head: 'neck',
-      leftEye: 'head', rightEye: 'head', jaw: 'head',
-      leftShoulder: 'upperChest', leftUpperArm: 'leftShoulder',
-      leftLowerArm: 'leftUpperArm', leftHand: 'leftLowerArm',
-      rightShoulder: 'upperChest', rightUpperArm: 'rightShoulder',
-      rightLowerArm: 'rightUpperArm', rightHand: 'rightLowerArm',
-      leftUpperLeg: 'hips', leftLowerLeg: 'leftUpperLeg',
-      leftFoot: 'leftLowerLeg', leftToes: 'leftFoot',
-      rightUpperLeg: 'hips', rightLowerLeg: 'rightUpperLeg',
-      rightFoot: 'rightLowerLeg', rightToes: 'rightFoot',
-      leftThumbMetacarpal:  'leftHand',  leftThumbProximal: 'leftThumbMetacarpal',  leftThumbDistal: 'leftThumbProximal',
-      leftIndexProximal:    'leftHand',  leftIndexIntermediate: 'leftIndexProximal',  leftIndexDistal: 'leftIndexIntermediate',
-      leftMiddleProximal:   'leftHand',  leftMiddleIntermediate: 'leftMiddleProximal', leftMiddleDistal: 'leftMiddleIntermediate',
-      leftRingProximal:     'leftHand',  leftRingIntermediate: 'leftRingProximal',    leftRingDistal: 'leftRingIntermediate',
-      leftLittleProximal:   'leftHand',  leftLittleIntermediate: 'leftLittleProximal', leftLittleDistal: 'leftLittleIntermediate',
-      rightThumbMetacarpal: 'rightHand', rightThumbProximal: 'rightThumbMetacarpal', rightThumbDistal: 'rightThumbProximal',
-      rightIndexProximal:   'rightHand', rightIndexIntermediate: 'rightIndexProximal', rightIndexDistal: 'rightIndexIntermediate',
-      rightMiddleProximal:  'rightHand', rightMiddleIntermediate: 'rightMiddleProximal', rightMiddleDistal: 'rightMiddleIntermediate',
-      rightRingProximal:    'rightHand', rightRingIntermediate: 'rightRingProximal',  rightRingDistal: 'rightRingIntermediate',
-      rightLittleProximal:  'rightHand', rightLittleIntermediate: 'rightLittleProximal', rightLittleDistal: 'rightLittleIntermediate',
-    };
-
-    // Compute world-space quaternion by walking a node's parent chain.
-    function worldQuatOf(node) {
-      const chain = [];
-      let cur = node;
-      while (cur) {
-        chain.unshift(cur.rotationQuaternion?.clone() ?? BABYLON.Quaternion.Identity());
-        cur = cur.parent;
-      }
-      return chain.reduce((acc, q) => acc.multiply(q), BABYLON.Quaternion.Identity());
-    }
 
     // ---------------------------------------------------------------------------
     // DOM refs
@@ -101,11 +63,11 @@
         s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
         s.onload = () => {
           // vrm1-loader.js registers VRMC_vrm so VRM 1.0 humanoid bones (hips, neck, head)
-          // are correctly mapped in humanoidBone — without it those bones are skipped.
+          // are correctly mapped — without it those bones are dropped from retargeting.
           const s2 = document.createElement('script');
           s2.src = GITHUB_RAW + '/vrm1-loader.js';
           s2.onload = resolve;
-          s2.onerror = e => { console.warn('[vrm1-loader] failed — VRM 1.0 bones may be incomplete', e); resolve(); };
+          s2.onerror = e => { console.warn('[vrm1-loader] failed to load — VRM 1.0 bones may be incomplete', e); resolve(); };
           document.head.appendChild(s2);
         };
         s.onerror = reject;
@@ -121,30 +83,16 @@
     // ---------------------------------------------------------------------------
     const canvas = document.getElementById('renderCanvas');
     const engine = new BABYLON.Engine(canvas, true);
-    engine.setHardwareScalingLevel(1); // native resolution
+    engine.setHardwareScalingLevel(1);
     const scene  = new BABYLON.Scene(engine);
 
-    // Camera: VRM 1.0 loader applies 180°Y on __root__ → character faces +Z in world space.
+    // Camera: VRM loader applies 180°Y on __root__ → character faces +Z in world space.
     // Camera at alpha=+π/2 sits at +Z, looks toward -Z → sees character front.
     const camera = new BABYLON.ArcRotateCamera('cam', Math.PI / 2, Math.PI / 2 - 0.12, 5,
       new BABYLON.Vector3(0, 0.9, 0), scene);
     camera.attachControl(canvas, true);
     camera.lowerRadiusLimit = 0.5;
     camera.upperRadiusLimit = 15;
-
-    // External sync API: theta=0 is front (alpha=π/2), phi is elevation above horizon
-    window.setCameraOrbit = (theta, phi, radius, targetY) => {
-      camera.alpha   = theta + Math.PI / 2;
-      camera.beta    = Math.PI / 2 - phi;
-      camera.radius  = radius;
-      camera.target.y = targetY;
-    };
-    window.getCameraOrbit = () => ({
-      theta:   camera.alpha - Math.PI / 2,
-      phi:     Math.PI / 2 - camera.beta,
-      radius:  camera.radius,
-      targetY: camera.target.y,
-    });
 
     new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
     const dirLight = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-1, -2, -1), scene);
@@ -158,56 +106,23 @@
     const vrmManager = scene.metadata?.vrmManagers?.[0];
     if (!vrmManager) throw new Error('VRM manager not found');
 
-    // --- Capture Rest Rotations for Robo Arm ---
-    const ROBO_CONSTRAINTS_LIST = [
-        { target: 'robo_shoulder.L',  source: 'shoulder.L' },
-        { target: 'robo_upper_arm.L', source: 'upper_arm.L' },
-        { target: 'robo_forearm.L',   source: 'forearm.L' },
-        { target: 'robo_hand.L',      source: 'hand.L' },
-        // Fingers
-        { target: 'robo_thumb.01.L', source: 'thumb.01.L' },
-        { target: 'robo_thumb.02.L', source: 'thumb.02.L' },
-        { target: 'robo_thumb.03.L', source: 'thumb.03.L' },
-        { target: 'robo_f_index.01.L', source: 'f_index.01.L' },
-        { target: 'robo_f_index.02.L', source: 'f_index.02.L' },
-        { target: 'robo_f_index.03.L', source: 'f_index.03.L' },
-        { target: 'robo_f_middle.01.L', source: 'f_middle.01.L' },
-        { target: 'robo_f_middle.02.L', source: 'f_middle.02.L' },
-        { target: 'robo_f_middle.03.L', source: 'f_middle.03.L' },
-        { target: 'robo_f_ring.01.L', source: 'f_ring.01.L' },
-        { target: 'robo_f_ring.02.L', source: 'f_ring.02.L' },
-        { target: 'robo_f_ring.03.L', source: 'f_ring.03.L' },
-        { target: 'robo_f_pinky.01.L', source: 'f_pinky.01.L' },
-        { target: 'robo_f_pinky.02.L', source: 'f_pinky.02.L' },
-        { target: 'robo_f_pinky.03.L', source: 'f_pinky.03.L' },
-    ];
-
-    const constraintNodesGlobal = ROBO_CONSTRAINTS_LIST.map(c => {
-        const target = scene.getNodeByName(c.target);
-        const source = scene.getNodeByName(c.source);
-        if (target && source) {
-            return {
-                target,
-                source,
-                initialTargetRot: target.rotationQuaternion ? target.rotationQuaternion.clone() : target.rotation.toQuaternion(),
-                initialSourceRot: source.rotationQuaternion ? source.rotationQuaternion.clone() : source.rotation.toQuaternion(),
-            };
-        }
-        return null;
-    }).filter(c => c !== null);
-
-    if (constraintNodesGlobal.length > 0) {
-        console.log(`[Babylon] Initialized ${constraintNodesGlobal.length} manual delta-rotation constraints from rest pose`);
-        scene.onBeforeRenderObservable.add(() => {
-            constraintNodesGlobal.forEach(c => {
-                const currentSourceRot = c.source.rotationQuaternion ? c.source.rotationQuaternion : c.source.rotation.toQuaternion();
-                // Delta = currentSource * inverse(initialSource)
-                const invInitialSource = BABYLON.Quaternion.Inverse(c.initialSourceRot);
-                const delta = currentSourceRot.multiply(invInitialSource);
-                // target = delta * initialTarget
-                c.target.rotationQuaternion = delta.multiply(c.initialTargetRot);
-            });
-        });
+    // ---------------------------------------------------------------------------
+    // Spring bone update — runs every frame after the skeleton has been posed.
+    // springBoneController10 = VRM 1.0 (VRMC_springBone)
+    // springBoneController   = VRM 0.x (secondaryAnimation)
+    // ---------------------------------------------------------------------------
+    const springController = vrmManager.springBoneController10 ?? vrmManager.springBoneController ?? null;
+    if (springController) {
+      console.log('[Spring bones] controller found:', springController.constructor?.name ?? 'unknown');
+      let _lastMs = performance.now();
+      scene.onBeforeRenderObservable.add(() => {
+        const now = performance.now();
+        const dt  = Math.min((now - _lastMs) / 1000, 0.05); // cap at 50 ms to avoid jumps on tab-blur
+        _lastMs   = now;
+        springController.update(dt);
+      });
+    } else {
+      console.log('[Spring bones] no controller found on this model');
     }
 
     // VRM hips bone (root reference for AnimatorAvatar fixRootPosition)
@@ -225,15 +140,11 @@
     let currentGroup     = null;
     let currentContainer = null;
 
-    // Optional: Reference to spring bone controller for manual updates if needed
-    let springController = null;
-
     async function playAnimation(entry) {
       btn.disabled = true;
       statusEl.textContent = 'loading…';
       descEl.textContent   = entry.description;
 
-      // ... (existing cleanup code)
       if (currentGroup) { currentGroup.stop(); currentGroup.dispose(); currentGroup = null; }
       if (currentContainer) { currentContainer.dispose(); currentContainer = null; }
       if (scene.metadata?.vrmAnimationManagers) { scene.metadata.vrmAnimationManagers = []; }
@@ -270,15 +181,6 @@
 
       remapped.start(true, 1.0, remapped.from, remapped.to, false);
       remapped.goToFrame(remapped.from);
-      
-      // Ensure spring bones are discovered
-      springController = vrmManager.springBoneController10 || vrmManager.springBoneController;
-      
-      // Node Constraints discovery (VRM 1.0)
-      const constraintManager = vrmManager.nodeConstraintManager || vrmManager.ext10?.nodeConstraintManager;
-      if (constraintManager) {
-          console.log('[Babylon] Node constraint manager found:', constraintManager);
-      }
 
       scene.render();
       currentGroup = remapped;
@@ -298,15 +200,9 @@
       if (!window.remappedGroup || !window.scene) return null;
       const fps = window.remappedGroup.targetedAnimations[0]?.animation?.framePerSecond ?? 60;
       window.remappedGroup.goToFrame(t * fps);
-      
-      // Manually update spring bones with a fixed delta if we are seeking
       if (springController) {
-          // We need to simulate some time passing for physics to work
-          // Seek usually jumps, which breaks physics. 
-          // We'll do a few small steps to let it settle.
-          for(let i=0; i<5; i++) springController.update(0.016);
+        for (let i = 0; i < 5; i++) springController.update(0.016);
       }
-      
       window.scene.render();
       const mgr = window.scene.metadata?.vrmManagers?.[0];
       if (!mgr) return null;
@@ -316,7 +212,6 @@
         const q = bone?.rotationQuaternion;
         if (q) result[name] = { x: +q.x.toFixed(4), y: +q.y.toFixed(4), z: +q.z.toFixed(4), w: +q.w.toFixed(4) };
       }
-      // Add extra bones
       for (const name of extraBones) {
         const node = window.scene.getNodeByName(name);
         const q = node?.rotationQuaternion;
@@ -343,6 +238,8 @@
       ? (animations.find(a => a.url === HASH_VRMA) ?? { url: HASH_VRMA, description: HASH_VRMA })
       : pickRandom();
     await playAnimation(firstEntry);
+
+    document.getElementById('ui').style.display = '';
 
     // Cap render loop to ~30 fps to reduce GPU load when viewed alongside A-Frame.
     let _lastRender = 0;
