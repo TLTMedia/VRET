@@ -58,6 +58,7 @@
   </div>
 
   <script type="module">
+    import { ARKitFaceDriver } from './arkit-face-driver.js';
 
     const VRM_MODELS = ["models/AIAN/AIAN_F_1_Busi.vrm","models/AIAN/AIAN_F_1_Casual.vrm","models/AIAN/AIAN_F_1_Medi.vrm","models/AIAN/AIAN_F_1_Milit.vrm","models/AIAN/AIAN_F_1_Util.vrm","models/AIAN/AIAN_F_2_Busi.vrm","models/AIAN/AIAN_F_2_Casual.vrm","models/AIAN/AIAN_F_2_Medi.vrm","models/AIAN/AIAN_F_2_Milit.vrm","models/AIAN/AIAN_F_2_Util.vrm","models/AIAN/AIAN_M_1_Busi.vrm","models/AIAN/AIAN_M_1_Casual.vrm","models/AIAN/AIAN_M_1_Medi.vrm","models/AIAN/AIAN_M_1_Milit.vrm","models/AIAN/AIAN_M_1_Util.vrm","models/AIAN/AIAN_M_2_Busi.vrm","models/AIAN/AIAN_M_2_Casual.vrm","models/AIAN/AIAN_M_2_Medi.vrm","models/AIAN/AIAN_M_2_Milit.vrm","models/AIAN/AIAN_M_2_Util.vrm","models/Asian/Asian_F_1_Busi.vrm","models/Asian/Asian_F_1_Casual.vrm","models/Asian/Asian_F_1_Default.vrm","models/Asian/Asian_F_1_Medi.vrm","models/Asian/Asian_F_1_Milit.vrm","models/Asian/Asian_F_1_Util.vrm","models/Asian/Asian_F_2_Busi.vrm","models/Asian/Asian_F_2_Casual.vrm","models/Asian/Asian_F_2_Default.vrm","models/Asian/Asian_F_2_Medi.vrm","models/Asian/Asian_F_2_Milit.vrm","models/Asian/Asian_F_2_Util.vrm","models/Asian/Asian_F_3_Busi.vrm","models/Asian/Asian_F_3_Casual.vrm","models/Asian/Asian_F_3_Default.vrm","models/Asian/Asian_F_3_Medi.vrm","models/Asian/Asian_F_3_Milit.vrm","models/Asian/Asian_F_3_Util.vrm","models/Asian/Asian_M_1_Busi.vrm","models/Asian/Asian_M_1_Casual.vrm","models/Asian/Asian_M_1_Default.vrm","models/Asian/Asian_M_1_Medi.vrm","models/Asian/Asian_M_1_Milit.vrm","models/Asian/Asian_M_1_Util.vrm","models/Asian/Asian_M_2_Busi.vrm","models/Asian/Asian_M_2_Casual.vrm","models/Asian/Asian_M_2_Default.vrm","models/Asian/Asian_M_2_Medi.vrm","models/Asian/Asian_M_2_Milit.vrm","models/Asian/Asian_M_2_Util.vrm","models/Asian/Asian_M_3_Busi.vrm","models/Asian/Asian_M_3_Casual.vrm","models/Asian/Asian_M_3_Default.vrm","models/Asian/Asian_M_3_Medi.vrm","models/Asian/Asian_M_3_Milit.vrm","models/Asian/Asian_M_3_Util.vrm","models/Black/Black_F_1_Busi.vrm","models/Black/Black_F_1_Casual.vrm","models/Black/Black_F_1_Default.vrm","models/Black/Black_F_1_Medi.vrm","models/Black/Black_F_1_Milit.vrm","models/Black/Black_F_1_Util.vrm","models/Black/Black_F_2_Busi.vrm","models/Black/Black_F_2_Casual.vrm","models/Black/Black_F_2_Default.vrm","models/Black/Black_F_2_Medi.vrm","models/Black/Black_F_2_Milit.vrm","models/Black/Black_F_2_Util.vrm","models/Black/Black_F_3_Busi.vrm","models/Black/Black_F_3_Casual.vrm","models/Black/Black_F_3_Default.vrm","models/Black/Black_F_3_Medi.vrm","models/Black/Black_F_3_Milit.vrm","models/Black/Black_F_3_Util.vrm","models/Black/Black_M_1_Busi.vrm","models/Black/Black_M_1_Casual.vrm","models/Black/Black_M_1_Default.vrm","models/Black/Black_M_1_Medi.vrm","models/Black/Black_M_1_Milit.vrm","models/Black/Black_M_1_Util.vrm","models/Black/Black_M_2_Busi.vrm","models/Black/Black_M_2_Casual.vrm","models/Black/Black_M_2_Default.vrm","models/Black/Black_M_2_Medi.vrm","models/Black/Black_M_2_Milit.vrm","models/Black/Black_M_2_Util.vrm","models/Black/Black_M_3_Busi.vrm","models/Black/Black_M_3_Casual.vrm","models/Black/Black_M_3_Default.vrm","models/Black/Black_M_3_Medi.vrm","models/Black/Black_M_3_Milit.vrm","models/Black/Black_M_3_Util.vrm","models/Hispanic/Hispanic_F_1_Busi.vrm","models/Hispanic/Hispanic_F_1_Casual.vrm","models/Hispanic/Hispanic_F_1_Default.vrm","models/Hispanic/Hispanic_F_1_Medi.vrm","models/Hispanic/Hispanic_F_1_Milit.vrm","models/Hispanic/Hispanic_F_1_Util.vrm","models/Hispanic/Hispanic_F_2_Busi.vrm","models/Hispanic/Hispanic_F_2_Casual.vrm","models/Hispanic/Hispanic_F_2_Default.vrm","models/Hispanic/Hispanic_F_2_Medi.vrm","models/Hispanic/Hispanic_F_2_Milit.vrm","models/Hispanic/Hispanic_F_2_Util.vrm","models/Hispanic/Hispanic_F_3_Busi.vrm","models/Hispanic/Hispanic_F_3_Casual.vrm","models/Hispanic/Hispanic_F_3_Default.vrm","models/Hispanic/Hispanic_F_3_Medi.vrm","models/Hispanic/Hispanic_F_3_Milit.vrm","models/Hispanic/Hispanic_F_3_Util.vrm","models/Hispanic/Hispanic_M_1_Busi.vrm","models/Hispanic/Hispanic_M_1_Casual.vrm","models/Hispanic/Hispanic_M_1_Default.vrm","models/Hispanic/Hispanic_M_1_Medi.vrm","models/Hispanic/Hispanic_M_1_Milit.vrm","models/Hispanic/Hispanic_M_1_Util.vrm","models/Hispanic/Hispanic_M_2_Busi.vrm","models/Hispanic/Hispanic_M_2_Casual.vrm","models/Hispanic/Hispanic_M_2_Default.vrm","models/Hispanic/Hispanic_M_2_Medi.vrm","models/Hispanic/Hispanic_M_2_Milit.vrm","models/Hispanic/Hispanic_M_2_Util.vrm","models/Hispanic/Hispanic_M_3_Busi.vrm","models/Hispanic/Hispanic_M_3_Casual.vrm","models/Hispanic/Hispanic_M_3_Default.vrm","models/Hispanic/Hispanic_M_3_Medi.vrm","models/Hispanic/Hispanic_M_3_Milit.vrm","models/Hispanic/Hispanic_M_3_Util.vrm","models/MENA/MENA_F_1_Busi.vrm","models/MENA/MENA_F_1_Casual.vrm","models/MENA/MENA_F_1_Medi.vrm","models/MENA/MENA_F_1_Milit.vrm","models/MENA/MENA_F_1_Util.vrm","models/MENA/MENA_F_2_Busi.vrm","models/MENA/MENA_F_2_Casual.vrm","models/MENA/MENA_F_2_Medi.vrm","models/MENA/MENA_F_2_Milit.vrm","models/MENA/MENA_F_2_Util.vrm","models/MENA/MENA_M_1_Busi.vrm","models/MENA/MENA_M_1_Casual.vrm","models/MENA/MENA_M_1_Medi.vrm","models/MENA/MENA_M_1_Milit.vrm","models/MENA/MENA_M_1_Util.vrm","models/MENA/MENA_M_2_Busi.vrm","models/MENA/MENA_M_2_Casual.vrm","models/MENA/MENA_M_2_Medi.vrm","models/MENA/MENA_M_2_Milit.vrm","models/MENA/MENA_M_2_Util.vrm","models/MENA/MENA_M_3_Busi.vrm","models/MENA/MENA_M_3_Casual.vrm","models/MENA/MENA_M_3_Medi.vrm","models/MENA/MENA_M_3_Milit.vrm","models/MENA/MENA_M_3_Util.vrm","models/NHPI/NHPI_M_1_Busi.vrm","models/NHPI/NHPI_M_1_Casual.vrm","models/NHPI/NHPI_M_1_Medi.vrm","models/NHPI/NHPI_M_1_Milit.vrm","models/NHPI/NHPI_M_1_Util.vrm","models/NHPI/NHPI_M_2_Busi.vrm","models/NHPI/NHPI_M_2_Casual.vrm","models/NHPI/NHPI_M_2_Medi.vrm","models/NHPI/NHPI_M_2_Milit.vrm","models/NHPI/NHPI_M_2_Util.vrm","models/White/White_F_1_Busi.vrm","models/White/White_F_1_Casual.vrm","models/White/White_F_1_Default.vrm","models/White/White_F_1_Medi.vrm","models/White/White_F_1_Milit.vrm","models/White/White_F_1_Util.vrm","models/White/White_F_2_Busi.vrm","models/White/White_F_2_Casual.vrm","models/White/White_F_2_Default.vrm","models/White/White_F_2_Medi.vrm","models/White/White_F_2_Milit.vrm","models/White/White_F_2_Util.vrm","models/White/White_F_3_Busi.vrm","models/White/White_F_3_Casual.vrm","models/White/White_F_3_Default.vrm","models/White/White_F_3_Medi.vrm","models/White/White_F_3_Milit.vrm","models/White/White_F_3_Util.vrm","models/White/White_M_1_Busi.vrm","models/White/White_M_1_Casual.vrm","models/White/White_M_1_Default.vrm","models/White/White_M_1_Medi.vrm","models/White/White_M_1_Milit.vrm","models/White/White_M_1_Util.vrm","models/White/White_M_2_Busi.vrm","models/White/White_M_2_Casual.vrm","models/White/White_M_2_Default.vrm","models/White/White_M_2_Medi.vrm","models/White/White_M_2_Milit.vrm","models/White/White_M_2_Util.vrm","models/White/White_M_3_Busi.vrm","models/White/White_M_3_Casual.vrm","models/White/White_M_3_Default.vrm","models/White/White_M_3_Medi.vrm","models/White/White_M_3_Milit.vrm","models/White/White_M_3_Util.vrm"];
     const _male   = VRM_MODELS.filter(m => m.includes('_M_'));
@@ -85,13 +86,6 @@
       tongue:      ['tongueOut'],
       eye_look:    ['eyeLookDownLeft','eyeLookDownRight','eyeLookInLeft','eyeLookInRight',
                     'eyeLookOutLeft','eyeLookOutRight','eyeLookUpLeft','eyeLookUpRight'],
-    };
-
-    // Teeth morph targets driven alongside face shapes
-    const TEETH_MAP = {
-      jawOpen:     'h_teeth.t_MouthOpen_h',
-      mouthFunnel: 'h_teeth.t_Shout_h',
-      mouthClose:  'h_teeth.t_MPB_h',
     };
 
     // ---------------------------------------------------------------------------
@@ -131,7 +125,6 @@
     new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
     const dirLight = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-1, -2, -1), scene);
     dirLight.intensity = 0.5;
-    // Soft front fill to illuminate facial detail
     const fillLight = new BABYLON.PointLight('fill', new BABYLON.Vector3(0, 1.6, 1.5), scene);
     fillLight.intensity = 0.6;
 
@@ -141,82 +134,41 @@
     document.getElementById('model-name').textContent = VRM_FILE.replace('models/', '').replace('.vrm', '');
     statusEl.textContent = 'Loading VRM…';
     await BABYLON.ImportMeshAsync(VRM_FILE, scene);
-    statusEl.textContent = 'Scanning morph targets…';
+    statusEl.textContent = 'Initialising face driver…';
 
-    // Log all mesh names + morph counts so we can confirm H_DDS_HighRes is present
-    console.log('[_bab] meshes:',
-      scene.meshes.map(m => `${m.name} (morphs: ${m.morphTargetManager?.numTargets ?? 0})`));
-
-    // ---------------------------------------------------------------------------
-    // Build name → MorphTarget map for a mesh
-    // ---------------------------------------------------------------------------
-    function buildMorphMap(mesh) {
-      const map = new Map();
-      const mgr = mesh?.morphTargetManager;
-      if (!mgr) return map;
-      for (let i = 0; i < mgr.numTargets; i++) {
-        const t = mgr.getTarget(i);
-        map.set(t.name, t);
-      }
-      return map;
-    }
-
-    const faceMesh      = scene.getMeshByName('H_DDS_HighRes');
-    const teethDownMesh = scene.getMeshByName('h_TeethDown');
-    const teethUpMesh   = scene.getMeshByName('h_TeethUp');
-
-    if (!faceMesh) {
-      statusEl.textContent = 'H_DDS_HighRes not found — check console for mesh names';
-    }
-
-    const faceMap      = buildMorphMap(faceMesh);
-    const teethDownMap = buildMorphMap(teethDownMesh);
-    const teethUpMap   = buildMorphMap(teethUpMesh);
+    const vrmManager = scene.metadata?.vrmManagers?.[0];
+    const driver = new ARKitFaceDriver(vrmManager, scene);
 
     // ---------------------------------------------------------------------------
-    // Audit which of the 52  shapes are present
+    // Audit via driver mechanism map
     // ---------------------------------------------------------------------------
+    const MECH = ARKitFaceDriver.MECHANISM;
     const allShapes = Object.values(_SHAPES).flat();
-    const available = allShapes.filter(s => faceMap.has(s));
+    const available = allShapes.filter(s => MECH[s] && MECH[s] !== 'none');
 
-    console.group('[_bab]  blend shape audit');
+    console.group('[arkit_bab] shape audit');
     for (const [cat, shapes] of Object.entries(_SHAPES)) {
-      const present = shapes.filter(s => faceMap.has(s));
-      const missing = shapes.filter(s => !faceMap.has(s));
-      console.group(`${cat} (${present.length}/${shapes.length})`);
-      if (present.length) console.log('%cpresent: ' + present.join(', '), 'color:#0f0');
-      if (missing.length) console.log('%cmissing: ' + missing.join(', '), 'color:#f66');
+      console.group(`${cat} (${shapes.length})`);
+      for (const s of shapes) {
+        const m = MECH[s] ?? 'unknown';
+        console.log(`%c${s}: ${m}`, m === 'none' || m === 'unknown' ? 'color:#f66' : 'color:#0f0');
+      }
       console.groupEnd();
     }
-    console.log(`Total available: ${available.length} / 52`);
+    console.log(`Cycling: ${available.length} / 52 shapes`);
     console.groupEnd();
 
-    shapeCountEl.textContent = `Available: ${available.length} of 52  shapes`;
-    statusEl.textContent = faceMesh
-      ? `Ready — ${available.length} shapes found. Cycling…`
-      : 'Face mesh not found';
+    shapeCountEl.textContent = `${available.length} / 52 shapes (51 active + tongueOut)`;
+    statusEl.textContent = `Ready — cycling ${available.length} shapes`;
 
     // ---------------------------------------------------------------------------
-    // Apply a shape weight to face (+ teeth if mapped)
+    // Helpers
     // ---------------------------------------------------------------------------
-    function applyShape(name, value) {
-      const ft = faceMap.get(name);
-      if (ft) ft.influence = value;
-
-      const teethName = TEETH_MAP[name];
-      if (teethName) {
-        const td = teethDownMap.get(teethName);
-        const tu = teethUpMap.get(teethName);
-        if (td) td.influence = value;
-        if (tu) tu.influence = value;
-      }
-    }
-
     function getShapesForMode(mode) {
       switch (mode) {
-        case 'eyes':  return _SHAPES.eyes.filter(s => faceMap.has(s));
-        case 'mouth': return _SHAPES.mouth.filter(s => faceMap.has(s));
-        case 'brows': return _SHAPES.brows.filter(s => faceMap.has(s));
+        case 'eyes':  return [..._SHAPES.eyes, ..._SHAPES.eye_look].filter(s => available.includes(s));
+        case 'mouth': return _SHAPES.mouth.filter(s => available.includes(s));
+        case 'brows': return _SHAPES.brows.filter(s => available.includes(s));
         default:      return available;
       }
     }
@@ -229,14 +181,14 @@
     }
 
     // ---------------------------------------------------------------------------
-    // Tick — sine-wave cycling (direct port of _demo.html tick())
+    // Tick — sine-wave cycling
     // ---------------------------------------------------------------------------
     let currentIndex = 0;
     let elapsed = 0;
     let lastMs = performance.now();
 
     scene.onBeforeRenderObservable.add(() => {
-      if (!faceMesh || available.length === 0) return;
+      if (available.length === 0) return;
 
       const now = performance.now();
       const dt  = (now - lastMs) / 1000;
@@ -249,20 +201,22 @@
 
       if (elapsed > duration) {
         elapsed = 0;
-        applyShape(shapes[currentIndex], 0);
+        driver.set(shapes[currentIndex], 0);
         currentIndex = (currentIndex + 1) % shapes.length;
       }
 
       const value = Math.max(0, Math.sin(Math.PI * (elapsed / duration)));
       const name  = shapes[currentIndex];
-      applyShape(name, value);
+      driver.set(name, value);
 
       currentShapeEl.innerHTML =
-        `<span class="category">${getCategoryFor(name)}</span>: ${name} : ${value.toFixed(2)}`;
+        `<span class="category">${getCategoryFor(name)}</span>: ${name}`
+        + ` <span style="color:#aaa">[${MECH[name]}]</span>`
+        + ` : ${value.toFixed(2)}`;
     });
 
     modeSelect.addEventListener('change', () => {
-      for (const s of allShapes) applyShape(s, 0);
+      driver.reset();
       currentIndex = 0;
       elapsed = 0;
     });
