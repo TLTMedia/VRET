@@ -40,6 +40,8 @@
   </div>
 
   <script type="module">
+    import { ARKitFaceDriver } from './arkit-face-driver.js';
+
     // ── Config ─────────────────────────────────────────────────────────────────
     const VRM_FILE  = 'models/AIAN/AIAN_F_1_Casual.vrm';
     const VRMA_FILE = 'vrma/02_01.vrma';
@@ -79,64 +81,9 @@
 
       const getBone = n => vrmMgr.humanoidBone?.[n] ?? vrmMgr.humanoidBone?.nodeMap?.[n];
 
-      // ── Expression / morph system (inline — no ARKitFaceDriver dep) ───────────
-      let expressionManager = vrmMgr.expressionManager ?? vrmMgr.ext10?.expressionManager;
-      const morphBindMap = new Map();
-      if (vrmMgr.ext10?.expressions) {
-        const buildBinds = expr => {
-          return (expr?.morphTargetBinds ?? []).flatMap(b => {
-            const tn = vrmMgr.transformNodeCache?.[b.node];
-            if (!tn) return [];
-            const mesh = scene.meshes.find(m => m.name === tn.name && m.morphTargetManager);
-            const tgt  = mesh?.morphTargetManager?.getTarget(b.index);
-            return tgt ? [{ target: tgt, weight: b.weight }] : [];
-          });
-        };
-        for (const [k,e] of Object.entries(vrmMgr.ext10.expressions.preset ?? {})) {
-          const b = buildBinds(e); if (b.length) morphBindMap.set(k, b);
-        }
-        for (const [k,e] of Object.entries(vrmMgr.ext10.expressions.custom ?? {})) {
-          const b = buildBinds(e); if (b.length) morphBindMap.set(k, b);
-        }
-      }
-
-      // Eye bones
-      const leftEyeBone  = getBone('leftEye');
-      const rightEyeBone = getBone('rightEye');
-      const leftEyeRestQ  = leftEyeBone?.rotationQuaternion?.clone()  ?? BABYLON.Quaternion.Identity();
-      const rightEyeRestQ = rightEyeBone?.rotationQuaternion?.clone() ?? BABYLON.Quaternion.Identity();
-      const eyeV = { eyeLookDownLeft:0, eyeLookUpLeft:0, eyeLookInLeft:0, eyeLookOutLeft:0,
-                     eyeLookDownRight:0, eyeLookUpRight:0, eyeLookInRight:0, eyeLookOutRight:0 };
-      const EYE_SET = new Set(Object.keys(eyeV));
-
-      function flushEyes() {
-        const pitchL = (eyeV.eyeLookDownLeft  - eyeV.eyeLookUpLeft)  * 0.25;
-        const yawL   = (eyeV.eyeLookInLeft    - eyeV.eyeLookOutLeft) * 0.25;
-        const pitchR = (eyeV.eyeLookDownRight - eyeV.eyeLookUpRight) * 0.25;
-        const yawR   = (eyeV.eyeLookOutRight  - eyeV.eyeLookInRight) * 0.25;
-        if (leftEyeBone)  leftEyeBone.rotationQuaternion  = BABYLON.Quaternion.RotationYawPitchRoll(yawL,  pitchL, 0).multiply(leftEyeRestQ);
-        if (rightEyeBone) rightEyeBone.rotationQuaternion = BABYLON.Quaternion.RotationYawPitchRoll(yawR,  pitchR, 0).multiply(rightEyeRestQ);
-      }
-      function resetEyes() {
-        for (const k of Object.keys(eyeV)) eyeV[k] = 0;
-        if (leftEyeBone)  leftEyeBone.rotationQuaternion  = leftEyeRestQ.clone();
-        if (rightEyeBone) rightEyeBone.rotationQuaternion = rightEyeRestQ.clone();
-      }
-
-      function setExpr(name, value) {
-        if (name === 'tongueOut') return;
-        if (EYE_SET.has(name)) { eyeV[name] = Math.max(0, Math.min(1, value)); return; }
-        if (expressionManager?.setValue) { expressionManager.setValue(name, value); return; }
-        const binds = morphBindMap.get(name);
-        if (binds) { binds.forEach(b => { b.target.influence = value * b.weight; }); return; }
-        scene.meshes.forEach(m => {
-          if (!m.morphTargetManager) return;
-          for (let i = 0; i < m.morphTargetManager.numTargets; i++) {
-            const t = m.morphTargetManager.getTarget(i);
-            if (t.name === name) t.influence = value;
-          }
-        });
-      }
+      // ARKitFaceDriver handles morph name mapping for VRM 0.x (jawOpen→t_MouthOpen_h etc.)
+      // and eye bone rotation. It does NOT touch head/neck bones — those are driven below.
+      const faceDriver = new ARKitFaceDriver(vrmMgr, scene);
 
       // Head / neck pose — LAM head_pose: [pitch, yaw, roll] in radians
       // The VRM __root__ has 180°Y so yaw and roll are negated to map camera→model space.
@@ -165,8 +112,12 @@
       const animGroup      = animContainer.animationGroups[0];
       if (!vrmAnimMgr?.animationMap || !animGroup) throw new Error('No animation data in VRMA');
 
-      // Manual retargeting: VRMA glTF RHS → Babylon LHS via (-x, y, -z, w) flip.
-      // AnimatorAvatar silently drops hips/neck/head (TransformNodes ≠ Skeleton Bones).
+      // Manual retargeting: VRMA glTF RHS → Babylon LHS.
+      // VRM 1.0 spec says bone rest poses should be identity, but AIAN (and likely
+      // other pipeline-exported models) have non-identity rest quaternions baked in
+      // (e.g. leftUpperLeg = 180°X). Applying the flip directly overwrites those rest
+      // rotations, inverting the legs. Fix: restQ.multiply(flip(vrmaQ)) — same pattern
+      // as applyHeadPose. For spec-compliant models restQ=identity so result = flip only.
       const bodyGroup = new BABYLON.AnimationGroup('vrma-body', scene);
       animGroup.targetedAnimations.forEach((ta, i) => {
         const boneName = vrmAnimMgr.animationMap.get(i);
@@ -174,9 +125,10 @@
         if (!target) return;
         const anim = ta.animation.clone(ta.animation.name + '_body');
         if (anim.targetProperty === 'rotationQuaternion') {
+          const restQ = target.rotationQuaternion?.clone() ?? BABYLON.Quaternion.Identity();
           anim.getKeys().forEach(kf => {
             const q = kf.value;
-            kf.value = new BABYLON.Quaternion(-q.x, q.y, -q.z, q.w);
+            kf.value = restQ.multiply(new BABYLON.Quaternion(-q.x, q.y, -q.z, q.w));
           });
         } else if (anim.targetProperty === 'position') {
           anim.getKeys().forEach(kf => {
@@ -252,10 +204,8 @@
         startTime = 0;
         bodyGroup.stop();
         playBtn.textContent = '▶ Play';
-        resetEyes();
+        faceDriver.reset();
         applyHeadPose(null);
-        if (expressionManager?.reset) expressionManager.reset();
-        morphBindMap.forEach(bs => bs.forEach(b => { b.target.influence = 0; }));
       });
 
       scene.onBeforeRenderObservable.add(() => {
@@ -263,8 +213,7 @@
         const elapsed  = (performance.now() - startTime) / 1000;
         const frameIdx = Math.floor(elapsed * bsData.fps) % bsData.frames.length;
         const weights  = bsData.frames[frameIdx];
-        for (let i = 0; i < bsData.shapeNames.length; i++) setExpr(bsData.shapeNames[i], weights[i] ?? 0);
-        flushEyes();
+        for (let i = 0; i < bsData.shapeNames.length; i++) faceDriver.set(bsData.shapeNames[i], weights[i] ?? 0);
         applyHeadPose(bsData.headPose ? bsData.headPose[frameIdx] : null);
       });
 
