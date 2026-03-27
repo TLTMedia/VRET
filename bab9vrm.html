@@ -1,0 +1,159 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Babylon.js 9.0 VRM+VRMA POC (Standalone)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <!-- Load Babylon.js 9.0 Preview from CDN -->
+  <script src="https://preview.babylonjs.com/babylon.js"></script>
+  <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+  <style>
+    html, body, #renderCanvas { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #001a33; }
+    #ui {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      font: 13px monospace; color: #fff; text-align: center; pointer-events: none;
+    }
+    #description { max-width: 480px; opacity: 0.9; text-shadow: 0 1px 3px #000; }
+    #btn {
+      pointer-events: all; padding: 6px 18px; background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.4); color: #fff; border-radius: 4px;
+      cursor: pointer; font: 13px monospace;
+    }
+    #btn:hover { background: rgba(255,255,255,0.3); }
+    #status { opacity: 0.6; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+  <div id="ui">
+    <div id="description">Initializing Babylon 9.0...</div>
+    <button id="btn" style="display:none">⟳ Random animation</button>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    // Standalone POC — No TypeScript imports required
+    
+    async function init() {
+        const canvas = document.getElementById('renderCanvas');
+        const engine = new BABYLON.Engine(canvas, true);
+        const scene  = new BABYLON.Scene(engine);
+        
+        const descEl = document.getElementById('description');
+        const statusEl = document.getElementById('status');
+        const btn = document.getElementById('btn');
+
+        // 1. Monkey-patch AnimatorAvatar (TransformNodes lack getTotalVertices)
+        BABYLON.TransformNode.prototype.getTotalVertices ??= function() { return 0; };
+
+        // 2. Loader Setup
+        const loadLoaders = async () => {
+            // Base VRM 0.x Loader
+            await new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
+                s.onload = resolve; s.onerror = reject;
+                document.head.appendChild(s);
+            });
+            // VRM 1.0 Patch (Local)
+            await new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = './vrm1-loader.js';
+                s.onload = resolve; s.onerror = reject;
+                document.head.appendChild(s);
+            });
+        };
+
+        descEl.textContent = 'Loading Loaders...';
+        await loadLoaders();
+
+        // Setup environment
+        const camera = new BABYLON.ArcRotateCamera('cam', Math.PI / 2, Math.PI / 2 - 0.12, 4, new BABYLON.Vector3(0, 1, 0), scene);
+        camera.attachControl(canvas, true);
+        new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
+
+        // 3. Load Model
+        const params = new URLSearchParams(window.location.search);
+        const VRM_FILE = params.get('model') || 'models/AIAN/AIAN_F_1_Casual.vrm';
+        
+        descEl.textContent = 'Loading VRM...';
+        await BABYLON.ImportMeshAsync(VRM_FILE, scene);
+        
+        const vrmManager = scene.metadata?.vrmManagers?.[0];
+        if (!vrmManager) throw new Error('VRM manager not found');
+
+        // Identify Hips for AnimatorAvatar
+        const vrmHips = vrmManager.humanoidBone['hips'];
+        const vrmLeftFoot = vrmManager.humanoidBone['leftFoot'];
+        const rootMesh = scene.rootNodes.find(n => n.name === '__root__') || scene.meshes[0];
+
+        // Initialize AnimatorAvatar
+        const vrmAvatar = new BABYLON.AnimatorAvatar('vrm-avatar', rootMesh);
+
+        // 4. Animation Control
+        const animations = await fetch('animations.json').then(r => r.json());
+        btn.style.display = 'block';
+
+        let currentGroup = null;
+        let currentContainer = null;
+
+        async function playRandom() {
+            const entry = animations[Math.floor(Math.random() * animations.length)];
+            descEl.textContent = entry.description;
+            statusEl.textContent = 'Retargeting ' + entry.url + '...';
+            
+            if (currentGroup) { currentGroup.stop(); currentGroup.dispose(); }
+            if (currentContainer) { currentContainer.dispose(); }
+
+            try {
+                // VRMA manager tracking logic (multi-load safe)
+                const managersBefore = (scene.metadata?.vrmAnimationManagers ?? []).length;
+                currentContainer = await BABYLON.LoadAssetContainerAsync(entry.url, scene);
+                
+                const managers = scene.metadata?.vrmAnimationManagers ?? [];
+                const vrmAnimMgr = managers[managersBefore] ?? managers[managers.length - 1];
+                const animGroup = currentContainer.animationGroups[0];
+
+                // Build bone map for AnimatorAvatar
+                const mapNodeNames = new Map();
+                animGroup.targetedAnimations.forEach((targeted, i) => {
+                    const boneName = vrmAnimMgr.animationMap.get(i);
+                    const bone = vrmManager.humanoidBone[boneName];
+                    if (bone && targeted.target?.name) {
+                        mapNodeNames.set(targeted.target.name, bone.name);
+                    }
+                });
+
+                // The Magic: Native Babylon 9.0 Retargeting
+                currentGroup = vrmAvatar.retargetAnimationGroup(animGroup, {
+                    animationGroupName: 'vrma-remapped',
+                    fixRootPosition: true,
+                    rootNodeName: vrmHips.name,
+                    groundReferenceNodeName: vrmLeftFoot?.name,
+                    mapNodeNames,
+                });
+
+                currentGroup.start(true, 1.0, currentGroup.from, currentGroup.to, false);
+                statusEl.textContent = entry.url + ' (AnimatorAvatar)';
+            } catch (e) {
+                console.error(e);
+                statusEl.textContent = 'Error: ' + e.message;
+            }
+        }
+
+        btn.onclick = playRandom;
+        await playRandom();
+
+        engine.runRenderLoop(() => scene.render());
+        window.onresize = () => engine.resize();
+    }
+
+    init().catch(err => {
+        document.getElementById('description').textContent = 'Initialization Error';
+        document.getElementById('status').textContent = err.message;
+        console.error(err);
+    });
+  </script>
+</body>
+</html>

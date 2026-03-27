@@ -1,0 +1,329 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>facecap ARKit Expression Test — Babylon.js</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <script src="https://preview.babylonjs.com/babylon.js"></script>
+  <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+  <style>
+    html, body, #renderCanvas { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #111; }
+    #info {
+      position: fixed; top: 20px; left: 20px;
+      color: white; font-family: monospace;
+      background: rgba(0,0,0,0.8); padding: 15px; border-radius: 5px;
+      pointer-events: none; font-size: 1.2em; z-index: 100;
+    }
+    .highlight { color: #00ff00; font-weight: bold; }
+    .category  { color: #ffaa00; font-weight: bold; }
+    #controls {
+      position: fixed; bottom: 20px; left: 20px;
+      background: rgba(0,0,0,0.8); padding: 15px; border-radius: 5px;
+      z-index: 100; color: white; font-family: monospace;
+    }
+    #file-drop {
+      position: fixed; top: 20px; right: 20px;
+      background: rgba(0,0,0,0.8); padding: 15px; border-radius: 5px;
+      z-index: 100; color: white; font-family: monospace; text-align: center;
+      border: 2px dashed #555; min-width: 200px;
+    }
+    #file-drop.drag-over { border-color: #0f0; background: rgba(0,60,0,0.8); }
+    #file-drop label { cursor: pointer; display: block; margin-top: 8px; color: #aaf; }
+    #fileInput { display: none; }
+    select {
+      background: #333; color: white; border: 1px solid #666;
+      padding: 5px; font-family: monospace; margin: 5px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+
+  <div id="info">
+    <div>facecap ARKit Expression Test — Babylon.js</div>
+    <div id="status">Drop a GLB or use the file picker →</div>
+    <div id="current-shape" class="highlight"></div>
+    <div id="shape-count"></div>
+  </div>
+
+  <div id="controls">
+    <div>Filter:
+      <select id="modeSelect">
+        <option value="all">All Expressions</option>
+        <option value="arkit">ARKit Only</option>
+        <option value="custom">Non-ARKit</option>
+      </select>
+    </div>
+    <div>Speed:
+      <select id="speedSelect">
+        <option value="2.0">Slow</option>
+        <option value="1.5" selected>Normal</option>
+        <option value="1.0">Fast</option>
+        <option value="0.5">Very Fast</option>
+      </select>
+    </div>
+    <div style="margin-top:8px">
+      <label>GLB: <input id="modelPath" type="text" value="models/face_arkit.glb"
+        style="background:#333;color:white;border:1px solid #666;padding:4px;width:180px;font-family:monospace"/></label>
+      <button id="loadBtn" style="margin-left:5px;padding:4px 10px;font-family:monospace;cursor:pointer">Load</button>
+    </div>
+  </div>
+
+  <div id="file-drop" id="dropZone">
+    <div>Drag &amp; drop GLB here</div>
+    <label>or browse<input id="fileInput" type="file" accept=".glb"/></label>
+  </div>
+
+  <script type="module">
+    // ---------------------------------------------------------------------------
+    // ARKit reference names
+    // ---------------------------------------------------------------------------
+    const ARKIT_NAMES = new Set([
+      'eyeBlinkLeft','eyeBlinkRight','eyeLookDownLeft','eyeLookDownRight',
+      'eyeLookInLeft','eyeLookInRight','eyeLookOutLeft','eyeLookOutRight',
+      'eyeLookUpLeft','eyeLookUpRight','eyeSquintLeft','eyeSquintRight',
+      'eyeWideLeft','eyeWideRight',
+      'jawForward','jawLeft','jawOpen','jawRight',
+      'mouthClose','mouthDimpleLeft','mouthDimpleRight',
+      'mouthFrownLeft','mouthFrownRight','mouthFunnel','mouthLeft',
+      'mouthLowerDownLeft','mouthLowerDownRight',
+      'mouthPressLeft','mouthPressRight','mouthPucker','mouthRight',
+      'mouthRollLower','mouthRollUpper','mouthShrugLower','mouthShrugUpper',
+      'mouthSmileLeft','mouthSmileRight','mouthStretchLeft','mouthStretchRight',
+      'mouthUpperUpLeft','mouthUpperUpRight',
+      'noseSneerLeft','noseSneerRight',
+      'browDownLeft','browDownRight','browInnerUp',
+      'browOuterUpLeft','browOuterUpRight',
+      'cheekPuff','cheekSquintLeft','cheekSquintRight',
+      'tongueOut',
+    ]);
+
+    // ---------------------------------------------------------------------------
+    // DOM
+    // ---------------------------------------------------------------------------
+    const statusEl       = document.getElementById('status');
+    const currentShapeEl = document.getElementById('current-shape');
+    const shapeCountEl   = document.getElementById('shape-count');
+    const modeSelect     = document.getElementById('modeSelect');
+    const speedSelect    = document.getElementById('speedSelect');
+    const modelPathInput = document.getElementById('modelPath');
+    const loadBtn        = document.getElementById('loadBtn');
+    const fileInput      = document.getElementById('fileInput');
+    const dropZone       = document.getElementById('file-drop');
+
+    // ---------------------------------------------------------------------------
+    // Scene setup (once)
+    // ---------------------------------------------------------------------------
+    const canvas = document.getElementById('renderCanvas');
+    const engine = new BABYLON.Engine(canvas, true);
+    const scene  = new BABYLON.Scene(engine);
+
+    // Camera — face-level, close in
+    const camera = new BABYLON.ArcRotateCamera('cam', Math.PI / 2, Math.PI / 2 - 0.1, 0.4,
+      new BABYLON.Vector3(0, 0, 0), scene);
+    camera.attachControl(canvas, true);
+    camera.lowerRadiusLimit = 0.05;
+    camera.upperRadiusLimit = 200;
+
+    new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
+    const dir = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-1, -2, -1), scene);
+    dir.intensity = 0.5;
+    const fill = new BABYLON.PointLight('fill', new BABYLON.Vector3(0, 0.3, -0.5), scene);
+    fill.intensity = 0.6;
+
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener('resize', () => engine.resize());
+
+    // ---------------------------------------------------------------------------
+    // State
+    // ---------------------------------------------------------------------------
+    let allExpressions = [];  // [{name, targets: [{target, weight}]}]
+    let currentIndex = 0;
+    let elapsed = 0;
+    let lastMs = performance.now();
+    let tickHandle = null;
+
+    // ---------------------------------------------------------------------------
+    // Expression cycling
+    // ---------------------------------------------------------------------------
+    function getFiltered() {
+      const mode = modeSelect.value;
+      if (mode === 'arkit')  return allExpressions.filter(e => ARKIT_NAMES.has(e.name));
+      if (mode === 'custom') return allExpressions.filter(e => !ARKIT_NAMES.has(e.name));
+      return allExpressions;
+    }
+
+    function setExpr(expr, value) {
+      for (const { target, weight } of expr.targets) {
+        target.influence = value * weight;
+      }
+    }
+
+    function resetAll() {
+      for (const e of allExpressions) setExpr(e, 0);
+    }
+
+    function startTick() {
+      if (tickHandle) scene.onBeforeRenderObservable.remove(tickHandle);
+      currentIndex = 0; elapsed = 0; lastMs = performance.now();
+
+      tickHandle = scene.onBeforeRenderObservable.add(() => {
+        const now = performance.now();
+        const dt  = (now - lastMs) / 1000;
+        lastMs = now;
+
+        const dur  = parseFloat(speedSelect.value);
+        const list = getFiltered();
+        if (!list.length) return;
+
+        elapsed += dt;
+        if (elapsed > dur) {
+          elapsed = 0;
+          setExpr(list[currentIndex], 0);
+          currentIndex = (currentIndex + 1) % list.length;
+        }
+
+        const value = Math.max(0, Math.sin(Math.PI * (elapsed / dur)));
+        const expr  = list[currentIndex];
+        setExpr(expr, value);
+
+        const tag = ARKIT_NAMES.has(expr.name) ? 'ARKIT' : 'CUSTOM';
+        currentShapeEl.innerHTML =
+          `<span class="category">${tag}</span>: ${expr.name} : ${value.toFixed(2)}`;
+      });
+    }
+
+    modeSelect.addEventListener('change', () => { resetAll(); currentIndex = 0; elapsed = 0; });
+
+    // ---------------------------------------------------------------------------
+    // Load GLB from URL path
+    // ---------------------------------------------------------------------------
+    async function loadGlbFromPath(path) {
+      statusEl.textContent = `Loading ${path} …`;
+      currentShapeEl.textContent = '';
+      shapeCountEl.textContent = '';
+      resetAll();
+      allExpressions = [];
+
+      // Dispose old meshes
+      const toDispose = scene.meshes.slice();
+      toDispose.forEach(m => m.dispose());
+
+      try {
+        await BABYLON.ImportMeshAsync(path, scene);
+        finishLoad(path);
+      } catch (e) {
+        statusEl.textContent = 'ERROR: ' + e.message;
+        console.error(e);
+      }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Load GLB from File object (drag & drop / file picker)
+    // ---------------------------------------------------------------------------
+    async function loadGlbFromFile(file) {
+      statusEl.textContent = `Loading ${file.name} …`;
+      currentShapeEl.textContent = '';
+      shapeCountEl.textContent = '';
+      resetAll();
+      allExpressions = [];
+
+      const toDispose = scene.meshes.slice();
+      toDispose.forEach(m => m.dispose());
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const blob = new Blob([arrayBuffer], { type: 'model/gltf-binary' });
+        const url  = URL.createObjectURL(blob);
+
+        await BABYLON.ImportMeshAsync(url, scene);
+        URL.revokeObjectURL(url);
+        finishLoad(file.name);
+      } catch (e) {
+        statusEl.textContent = 'ERROR: ' + e.message;
+        console.error(e);
+      }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Post-load: discover morph targets
+    // ---------------------------------------------------------------------------
+    function finishLoad(label) {
+      // Scan all meshes for morphTargetManagers
+      // Build expression list: group targets by name across meshes
+      const byName = new Map();  // name → [{target, weight}]
+
+      for (const mesh of scene.meshes) {
+        const mgr = mesh.morphTargetManager;
+        if (!mgr) continue;
+        for (let i = 0; i < mgr.numTargets; i++) {
+          const t = mgr.getTarget(i);
+          if (!t.name) continue;
+          if (!byName.has(t.name)) byName.set(t.name, []);
+          byName.get(t.name).push({ target: t, weight: 1.0 });
+        }
+      }
+
+      if (!byName.size) {
+        statusEl.textContent = 'ERROR: No morph targets found in GLB.';
+        return;
+      }
+
+      // Order: ARKit names first (in spec order), then anything else
+      const arkit_ordered = [...ARKIT_NAMES].filter(n => byName.has(n));
+      const other_ordered = [...byName.keys()].filter(n => !ARKIT_NAMES.has(n)).sort();
+
+      allExpressions = [...arkit_ordered, ...other_ordered].map(name => ({
+        name,
+        targets: byName.get(name),
+      }));
+
+      console.log('[facecap-test] Expressions found:', allExpressions.map(e => e.name));
+
+      shapeCountEl.textContent =
+        `${allExpressions.length} morphs  (${arkit_ordered.length} ARKit, ${other_ordered.length} other)`;
+      statusEl.textContent = `Loaded: ${label}`;
+
+      // Auto-frame: centre camera on bounding box of loaded meshes
+      const meshes = scene.meshes.filter(m => m.getTotalVertices() > 0);
+      if (meshes.length) {
+        const bb = meshes[0].getHierarchyBoundingVectors(true);
+        for (const m of meshes.slice(1)) {
+          const b = m.getHierarchyBoundingVectors(true);
+          bb.min.minimizeInPlace(b.min);
+          bb.max.maximizeInPlace(b.max);
+        }
+        const centre = bb.min.add(bb.max).scaleInPlace(0.5);
+        const extent = bb.max.subtract(bb.min).length();
+        camera.target = centre;
+        camera.radius = extent * 1.5;
+      }
+
+      startTick();
+    }
+
+    // ---------------------------------------------------------------------------
+    // Wire up controls
+    // ---------------------------------------------------------------------------
+    loadBtn.addEventListener('click', () => loadGlbFromPath(modelPathInput.value.trim()));
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) loadGlbFromFile(fileInput.files[0]);
+    });
+
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file && file.name.endsWith('.glb')) loadGlbFromFile(file);
+    });
+
+    // Auto-load if a model exists at the default path
+    loadGlbFromPath(modelPathInput.value.trim()).catch(() => {
+      statusEl.textContent = 'Drop a GLB or use the file picker →';
+    });
+
+  </script>
+</body>
+</html>

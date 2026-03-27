@@ -58,3 +58,6 @@ screenshots/
 
 # Claude Code local settings
 .claude/
+
+# Third-party cloned repos (not submodules)
+third_party/
