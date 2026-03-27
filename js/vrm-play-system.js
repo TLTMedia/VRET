@@ -142,6 +142,7 @@ AFRAME.registerComponent('vrm-actor', {
         this.mixer = null;
         this.isReady = false;
         this.currentAction = null;
+        this.pendingStop = null; // { action, remaining } for duration-limited loops
         this.audio = null;
         this.lipSyncData = null;
         this.mesh = null; // For visemes
@@ -201,6 +202,9 @@ AFRAME.registerComponent('vrm-actor', {
                 action.play();
             }
             this.currentAction = action;
+            this.pendingStop = data.loop && data.duration
+                ? { action, remaining: data.duration }
+                : null;
         });
     },
 
@@ -252,6 +256,15 @@ AFRAME.registerComponent('vrm-actor', {
 
     tick: function (t, dt) {
         if (this.mixer) this.mixer.update(dt / 1000);
+
+        if (this.pendingStop) {
+            this.pendingStop.remaining -= dt / 1000;
+            if (this.pendingStop.remaining <= 0) {
+                this.pendingStop.action.fadeOut(0.5);
+                this.pendingStop = null;
+                this.currentAction = null;
+            }
+        }
 
         // Handle Lip Sync visemes
         if (this.audio && this.audio.isPlaying && this.lipSyncData && this.mesh) {
