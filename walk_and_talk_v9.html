@@ -105,43 +105,38 @@
         if (neckBone && neckRestQ) neckBone.rotationQuaternion = neckRestQ.multiply(nq);
       }
 
-      // ── Load VRMA ─────────────────────────────────────────────────────────────
+      // ── Load VRMA — AnimatorAvatar retargeting ────────────────────────────────
+      // Manual restQ.multiply only fixes each bone's own local rest pose and misses
+      // the full-chain normalization (e.g. AIAN's 128° shoulder propagates into the
+      // upper arm's parent frame). AnimatorAvatar handles T-pose normalization in
+      // world space across the full hierarchy — same approach as babvrm.html / v8.
       statusEl.textContent = 'Loading VRMA…';
+      BABYLON.TransformNode.prototype.getTotalVertices ??= function() { return 0; };
+
       const animContainer  = await BABYLON.LoadAssetContainerAsync(VRMA_FILE, scene);
       const vrmAnimMgr     = scene.metadata?.vrmAnimationManagers?.at(-1);
       const animGroup      = animContainer.animationGroups[0];
       if (!vrmAnimMgr?.animationMap || !animGroup) throw new Error('No animation data in VRMA');
 
-      // Manual retargeting: VRMA glTF RHS → Babylon LHS.
-      // VRM 1.0 spec says bone rest poses should be identity, but AIAN (and likely
-      // other pipeline-exported models) have non-identity rest quaternions baked in
-      // (e.g. leftUpperLeg = 180°X). Applying the flip directly overwrites those rest
-      // rotations, inverting the legs. Fix: restQ.multiply(flip(vrmaQ)) — same pattern
-      // as applyHeadPose. For spec-compliant models restQ=identity so result = flip only.
-      const bodyGroup = new BABYLON.AnimationGroup('vrma-body', scene);
+      // Build source→target name map for AnimatorAvatar
+      const mapNodeNames = new Map();
       animGroup.targetedAnimations.forEach((ta, i) => {
         const boneName = vrmAnimMgr.animationMap.get(i);
-        const target   = getBone(boneName);
-        if (!target) return;
-        const anim = ta.animation.clone(ta.animation.name + '_body');
-        if (anim.targetProperty === 'rotationQuaternion') {
-          const restQ = target.rotationQuaternion?.clone() ?? BABYLON.Quaternion.Identity();
-          anim.getKeys().forEach(kf => {
-            const q = kf.value;
-            kf.value = restQ.multiply(new BABYLON.Quaternion(-q.x, q.y, -q.z, q.w));
-          });
-        } else if (anim.targetProperty === 'position') {
-          anim.getKeys().forEach(kf => {
-            const v = kf.value;
-            kf.value = new BABYLON.Vector3(-v.x, v.y, -v.z);
-          });
-        }
-        bodyGroup.addTargetedAnimation(anim, target);
+        const bone = getBone(boneName);
+        if (bone && ta.target?.name) mapNodeNames.set(ta.target.name, bone.name);
       });
 
-      // v9 AnimationGroupMask: body VRMA yields head + neck to A2F head pose.
-      // When A2F exports include headRotation quaternion data, applyHeadPose() above
-      // will drive those bones; the mask ensures the VRMA doesn't fight it.
+      const vrmRootMesh = scene.rootNodes?.find(n => n.name === '__root__') ?? scene.meshes?.[0];
+      const vrmAvatar   = new BABYLON.AnimatorAvatar('vrm-avatar', vrmRootMesh);
+      const bodyGroup   = vrmAvatar.retargetAnimationGroup(animGroup, {
+        animationGroupName:      'vrma-body',
+        fixRootPosition:         true,
+        rootNodeName:            getBone('hips')?.name,
+        groundReferenceNodeName: getBone('leftFoot')?.name,
+        mapNodeNames,
+      });
+
+      // v9: AnimationGroupMask — exclude head & neck so A2F head pose drives them
       const maskNames = [headBone?.name, neckBone?.name].filter(Boolean);
       if (maskNames.length && BABYLON.AnimationGroupMask) {
         bodyGroup.mask = new BABYLON.AnimationGroupMask(
