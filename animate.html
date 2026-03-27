@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VRM CMU Animation Viewer</title>
+    <meta name="description" content="View CMU mocap animation on random VRM model">
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">
+
+    <script src="js/aframe-v1.7.1.js"></script>
+    <script src="js/aframe-environment-component.js"></script>
+
+    <!-- Official three-vrm libraries -->
+    <script src="js/three-vrm.js"></script>
+    <script src="js/three-vrm-animation.js"></script>
+
+    <!-- Custom A-Frame VRM component bundle -->
+    <script src="js/aframe-vrm-bundle.js"></script>
+</head>
+
+<body>
+
+<style>
+#info-panel {
+    display: none;
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    width: 400px;
+    background: rgba(0,0,0,0.8);
+    color: #0f0;
+    font-family: monospace;
+    font-size: 12px;
+    padding: 15px;
+    z-index: 1000;
+    border: 1px solid #0f0;
+}
+#info-panel h3 {
+    margin: 0 0 10px 0;
+    color: #0ff;
+}
+.control-group {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #0a5;
+}
+.slider-container {
+    margin: 5px 0;
+}
+.slider-container input[type="range"] {
+    width: 100%;
+    margin: 5px 0;
+}
+.slider-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #0ff;
+}
+</style>
+
+<div id="info-panel">
+    <h3>VRM CMU Animation Viewer</h3>
+    <div>Model: <span id="current-model">Loading...</span></div>
+    <div>Animation: <span id="current-anim">None</span></div>
+    
+    <div class="control-group">
+        <div class="slider-container">
+            <div class="slider-label">
+                <span>Leg Spread</span>
+                <span id="leg-spread-value">0.00</span>
+            </div>
+            <input type="range" id="leg-spread-slider" min="-1" max="1" step="0.05" value="0">
+        </div>
+    </div>
+    <div style="margin-top: 10px;">
+        <a href="index.html" style="color: #fff;">&lt; Back to List</a>
+    </div>
+</div>
+
+<script>
+// Available VRM models (subset for quick loading)
+const VRM_MODELS = [
+    'models/avatar.vrm',
+    'models/Asian/Asian_F_1_Busi.vrm',
+    'models/Hispanic/Hispanic_M_1_Casual.vrm',
+    'models/AIAN/AIAN_F_1_Util.vrm',
+    'models/NHPI/NHPI_M_1_Busi.vrm'
+];
+
+// ?model= query param overrides random pick (used by compare.html / Playwright)
+const params = new URLSearchParams(location.search);
+const randomModel = params.get('model') || VRM_MODELS[Math.floor(Math.random() * VRM_MODELS.length)];
+console.log('Selected model:', randomModel);
+document.getElementById('current-model').textContent = randomModel.split('/').pop();
+
+window.animationReady = false;
+
+// Get animation from hash
+const hashAnim = window.location.hash.substring(1); // remove #
+console.log('Detected animation hash:', hashAnim);
+document.getElementById('current-anim').textContent = hashAnim || "No animation specified";
+
+
+// Single Animation Player component
+AFRAME.registerComponent('anim-player', {
+    init: function () {
+        this.vrm = null;
+        this.mixer = null;
+        this.currentAction = null;
+
+        // Wait for VRM to load
+        this.el.addEventListener('model-loaded', (e) => {
+            this.vrm = e.detail.vrm;
+            this.mixer = this.el.components.vrm?.mixer;
+            console.log('VRM loaded event fired. vrm:', !!this.vrm, 'mixer:', !!this.mixer);
+            
+            if (this.vrm) {
+                console.log('vrm keys:', Object.keys(this.vrm));
+                if (this.vrm.springBoneManager) {
+                    const sm = this.vrm.springBoneManager;
+                    console.log('springBoneManager found. keys:', Object.keys(sm));
+                    const springs = sm.springs || sm.springGroups || [];
+                    console.log('Detected springs count:', springs.length);
+                }
+                if (this.vrm.vrmcVRMCSpringBone) {
+                    console.log('vrmcVRMCSpringBone extension data found');
+                }
+            }
+
+            if (hashAnim) {
+                console.log('Calling loadAnimation with:', hashAnim);
+                this.loadAnimation(hashAnim);
+            }
+        });
+    },
+
+    loadAnimation: async function (animUrl) {
+        if (!this.vrm || !this.mixer) return;
+
+        console.log('Loading animation:', animUrl);
+        
+        const loader = new THREE.GLTFLoader();
+        console.log('GLTFLoader instance created');
+        loader.register((parser) => {
+          const plugin = new THREE.VRMAnimationLoaderPlugin(parser);
+          const originalAfterRoot = plugin.afterRoot.bind(plugin);
+          plugin.afterRoot = async function(gltf) {
+            if (gltf.parser.json.extensions && gltf.parser.json.extensions.VRMC_vrm_animation) {
+              const vrmcAnim = gltf.parser.json.extensions.VRMC_vrm_animation;
+              if (!vrmcAnim.specVersion) {
+                vrmcAnim.specVersion = '1.0';
+              }
+            }
+            return originalAfterRoot(gltf);
+          };
+          return plugin;
+        });
+
+        try {
+            const gltf = await loader.loadAsync(animUrl);
+
+            if (gltf.userData.vrmAnimations && gltf.userData.vrmAnimations.length > 0) {
+                const vrmAnimation = gltf.userData.vrmAnimations[0];
+                const clip = THREE.createVRMAnimationClip(vrmAnimation, this.vrm);
+
+                if (clip) {
+                    if (this.currentAction) this.currentAction.stop();
+
+                    this.currentAction = this.mixer.clipAction(clip);
+                    this.currentAction.loop = THREE.LoopRepeat;
+                    this.currentAction.clampWhenFinished = false;
+                    this.currentAction.enabled = true;
+                    this.currentAction.timeScale = 1.0;
+                    this.currentAction.play();
+                    window.animationReady = true;
+                    window._vrmComp = this;
+
+                    console.log('Animation playing:', animUrl, 'duration:', clip.duration);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading animation:', error);
+            document.getElementById('current-anim').textContent = "Error loading " + animUrl;
+        }
+    }
+});
+
+// Playwright hook: seek to time t (seconds) and return bone quaternions.
+window.getBoneQuats = function(t, extraBones = []) {
+    const comp = window._vrmComp;
+    if (!comp?.vrm || !comp?.mixer) return null;
+    comp.mixer.setTime(t);
+    // Use a small delta to allow spring bones to calculate their state,
+    // though for true physics we'd need to simulate multiple frames.
+    comp.vrm.update(0.016); 
+    const bones = ['hips','spine','chest','upperChest','neck','head',
+        'leftShoulder','leftUpperArm','leftLowerArm','leftHand',
+        'rightShoulder','rightUpperArm','rightLowerArm','rightHand',
+        'leftUpperLeg','leftLowerLeg','leftFoot',
+        'rightUpperLeg','rightLowerLeg','rightFoot'];
+    const result = {};
+    for (const bone of bones) {
+        const node = comp.vrm.humanoid.getNormalizedBoneNode(bone);
+        if (node?.quaternion) {
+            const q = node.quaternion;
+            result[bone] = { x: +q.x.toFixed(4), y: +q.y.toFixed(4), z: +q.z.toFixed(4), w: +q.w.toFixed(4) };
+        }
+    }
+    // Add extra bones
+    for (const boneName of extraBones) {
+        const node = comp.vrm.scene.getObjectByName(boneName);
+        if (node?.quaternion) {
+            const q = node.quaternion;
+            result[boneName] = { x: +q.x.toFixed(4), y: +q.y.toFixed(4), z: +q.z.toFixed(4), w: +q.w.toFixed(4) };
+        }
+    }
+    return result;
+};
+
+// Component to adjust leg spread
+AFRAME.registerComponent('leg-fixer', {
+    schema: {
+        spread: {type: 'number', default: 0.0 }
+    },
+    init: function () {
+        this.vrm = null;
+        this.leftUpperLeg = null;
+        this.rightUpperLeg = null;
+        this.zAxis = new THREE.Vector3(0, 0, 1);
+        this.leftOffset = new THREE.Quaternion();
+        this.rightOffset = new THREE.Quaternion();
+
+        this.el.addEventListener('model-loaded', (e) => {
+            this.vrm = e.detail.vrm;
+            if (!this.vrm.humanoid) {
+                console.error("VRM humanoid bones not found.");
+                return;
+            }
+            // Using strings for bone names as they are consistent identifiers
+            this.leftUpperLeg = this.vrm.humanoid.getBoneNode('leftUpperLeg');
+            this.rightUpperLeg = this.vrm.humanoid.getBoneNode('rightUpperLeg');
+
+            if (!this.leftUpperLeg || !this.rightUpperLeg) {
+                console.error("Could not find upper leg bones!");
+            }
+        });
+
+        const slider = document.getElementById('leg-spread-slider');
+        if (slider) {
+            slider.addEventListener('input', (event) => {
+                this.el.setAttribute('leg-fixer', 'spread', event.target.value);
+                const spreadValueSpan = document.getElementById('leg-spread-value');
+                if(spreadValueSpan) spreadValueSpan.textContent = parseFloat(event.target.value).toFixed(2);
+            });
+        }
+    },
+    tick: function () {
+        if (!this.leftUpperLeg || !this.rightUpperLeg) { return; }
+
+        // The vrm component's tick updates the animation mixer.
+        // This component's tick runs after, so we can modify the bone quaternions
+        // right after animation has been applied and before rendering.
+        // The rotation is applied in the bone's local space.
+        
+        const spreadAngle = this.data.spread * Math.PI / 4; // Max 45 degrees spread/cross
+
+        this.leftOffset.setFromAxisAngle(this.zAxis, spreadAngle);
+        this.rightOffset.setFromAxisAngle(this.zAxis, -spreadAngle);
+        
+        this.leftUpperLeg.quaternion.premultiply(this.leftOffset);
+        this.rightUpperLeg.quaternion.premultiply(this.rightOffset);
+    }
+});
+</script>
+
+<a-scene>
+    <a-sky color="#001a33"></a-sky>
+
+    <!-- Ground plane -->
+    <a-plane
+        position="0 0 0"
+        rotation="-90 0 0"
+        width="50"
+        height="50"
+        color="#003366"
+        shadow="receive: true">
+    </a-plane>
+
+    <!-- VRM Avatar with animation player and leg fix -->
+    <a-entity
+        id="avatar"
+        vrm="src: ;"
+        anim-player
+        leg-fixer
+        position="0 0 -4"
+        rotation="0 180 0"
+        shadow="cast: true; receive: false;">
+    </a-entity>
+
+    <!-- Lighting -->
+    <a-entity light="type: ambient; intensity: 0.5;"></a-entity>
+    <a-entity light="type: directional; intensity: 0.8; castShadow: true;" position="2 4 2"></a-entity>
+
+    <!-- Camera -->
+    <a-entity id="cameraRig" position="0 1.6 1">
+        <a-camera></a-camera>
+    </a-entity>
+</a-scene>
+
+<script>
+// Set the random model after A-Frame is initialized
+setTimeout(() => {
+    document.getElementById('avatar').setAttribute('vrm', 'src', randomModel);
+}, 100);
+
+// External sync API: theta=0 = front of avatar (camera on +Z side of avatar at world z=-4)
+// phi = elevation above horizon, radius = distance
+const AVATAR_Z = -4;
+window.setCameraOrbit = (theta, phi, radius, targetY) => {
+    const sceneEl = document.querySelector('a-scene');
+    const camEl   = document.querySelector('[camera]');
+    const cam3    = sceneEl?.camera;  // actual THREE.PerspectiveCamera
+    const rig     = document.getElementById('cameraRig');
+    if (!cam3 || !camEl || !rig) return;
+    // Strip controls permanently — external orbit takes over
+    if (camEl.components['look-controls']) camEl.removeAttribute('look-controls');
+    if (camEl.components['wasd-controls']) camEl.removeAttribute('wasd-controls');
+    // Position rig at orbit point; all sub-entities stay at local origin
+    // Avatar faces -Z in A-Frame (two-vrm applies 180°Y + entity rotation="0 180 0" = 360° = -Z facing)
+    // Camera must be on -Z side: z = AVATAR_Z - radius (not + radius)
+    const cosPhi = Math.cos(phi);
+    const x = radius * cosPhi * Math.sin(theta);
+    const y = targetY + radius * Math.sin(phi);
+    const z = AVATAR_Z - radius * cosPhi * Math.cos(theta);
+    rig.object3D.position.set(x, y, z);
+    rig.object3D.quaternion.identity();
+    camEl.object3D.position.set(0, 0, 0);
+    camEl.object3D.quaternion.identity();
+    cam3.position.set(0, 0, 0);
+    cam3.lookAt(0, targetY, AVATAR_Z);
+    // Match Babylon ArcRotateCamera default FOV (0.8 rad ≈ 45.8°)
+    cam3.fov = 0.8 * (180 / Math.PI);
+    cam3.updateProjectionMatrix();
+    cam3.updateMatrixWorld(true);
+};
+window.getCameraOrbit = () => {
+    const rig = document.getElementById('cameraRig');
+    if (!rig?.object3D) return null;
+    const p = rig.object3D.position;
+    const dx = p.x, dy = p.y - 0.9, dz = p.z - AVATAR_Z;
+    const radius = Math.sqrt(dx*dx + dy*dy + dz*dz);
+    // z = AVATAR_Z - radius * cos(theta) → -(z-AVATAR_Z) = radius * cos(theta)
+    return { theta: Math.atan2(dx, -(p.z - AVATAR_Z)), phi: Math.asin(dy / (radius || 1)), radius, targetY: 0.9 };
+};
+
+// Cap pixel ratio to 1 (no HiDPI supersampling) to keep GPU load reasonable
+document.querySelector('a-scene').addEventListener('renderstart', () => {
+    const renderer = document.querySelector('a-scene').renderer;
+    if (renderer) renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
+}, { once: true });
+</script>
+
+</body>
+</html>
