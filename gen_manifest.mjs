@@ -24,7 +24,7 @@ const manifest = {
   _comment: 'VRM/VRMA asset list for Babylon.js playground. Edit "default" to change the template starting point.',
   base: BASE,
   default: {
-    vrm:  'models/AIAN/AIAN_F_1_Casual.vrm',
+    vrm:  'models/Seed-san.vrm',
     vrma: 'vrma/02_01.vrma'
   },
   vrm,
