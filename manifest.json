@@ -1,8 +1,9 @@
 {
   "_comment": "VRM/VRMA asset list for Babylon.js playground. Edit \"default\" to change the template starting point.",
-  "base": "https://tltmedia.github.io/VRE/",
+  "vrmBase": "https://raw.githubusercontent.com/TLTMedia/VRET/main/",
+  "vrmaBase": "https://tltmedia.github.io/VRET/",
   "default": {
-    "vrm": "models/Seed-san.vrm",
+    "vrm": "models/AIAN/AIAN_F_1_Casual.vrm",
     "vrma": "vrma/02_01.vrma"
   },
   "vrm": [
@@ -169,6 +170,7 @@
     "models/NHPI/NHPI_M_2_Medi.vrm",
     "models/NHPI/NHPI_M_2_Milit.vrm",
     "models/NHPI/NHPI_M_2_Util.vrm",
+    "models/Seed-san-clean.vrm",
     "models/Seed-san.vrm",
     "models/White/White_F_1_Busi.vrm",
     "models/White/White_F_1_Casual.vrm",
