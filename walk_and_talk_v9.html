@@ -1,0 +1,224 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>VRM Walk &amp; Talk v9 — Babylon.js</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <script src="https://preview.babylonjs.com/babylon.js"></script>
+  <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+  <style>
+    html, body, #renderCanvas { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #001a33; }
+    #ui {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      background: rgba(0,0,0,0.75); padding: 12px 20px; border-radius: 8px;
+      color: white; font: 13px monospace; pointer-events: none; white-space: nowrap;
+    }
+    #ui * { pointer-events: auto; }
+    #status { color: #aaa; font-size: 11px; }
+    .row { display: flex; gap: 10px; align-items: center; }
+    button { cursor: pointer; padding: 4px 12px; }
+    label.file-btn {
+      background: #333; color: #aaa; border: 1px solid #555;
+      padding: 4px 10px; cursor: pointer; border-radius: 4px; font-size: 0.9em;
+    }
+    label.file-btn:hover { background: #444; color: white; }
+    input[type=file] { display: none; }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+  <div id="ui">
+    <div style="font-weight:bold">Walk &amp; Talk v9 — VRMA body + Audio2Face (LAM/A2F JSON)</div>
+    <div id="desc">—</div>
+    <div id="status">initializing…</div>
+    <div class="row">
+      <button id="playBtn" disabled>▶ Play</button>
+      <button id="stopBtn" disabled>■ Stop</button>
+      <label class="file-btn">Load A2F/LAM JSON <input type="file" id="jsonFile" accept=".json"></label>
+    </div>
+  </div>
+
+  <script type="module">
+    import { ARKitFaceDriver } from './arkit-face-driver.js';
+
+    // ── Config ─────────────────────────────────────────────────────────────────
+    const VRM_FILE  = 'models/AIAN/AIAN_F_1_Casual.vrm';
+    const VRMA_FILE = 'vrma/02_01.vrma';
+    const A2F_JSON  = 'audio/a2f_lam_sample.json'; // LAM format with head_pose; user can override via file picker
+
+    // ── VRM loader ─────────────────────────────────────────────────────────────
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://xuhuisheng.github.io/babylonjs-vrm/babylon-vrm-loader.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+
+    const canvas   = document.getElementById('renderCanvas');
+    const engine   = new BABYLON.Engine(canvas, true);
+    const scene    = new BABYLON.Scene(engine);
+    const statusEl = document.getElementById('status');
+    const descEl   = document.getElementById('desc');
+    const playBtn  = document.getElementById('playBtn');
+    const stopBtn  = document.getElementById('stopBtn');
+
+    // ── Scene ──────────────────────────────────────────────────────────────────
+    const camera = new BABYLON.ArcRotateCamera('cam', Math.PI/2, Math.PI/2.2, 3.5,
+      new BABYLON.Vector3(0, 1.2, 0), scene);
+    camera.wheelPrecision = 50; camera.minZ = 0.1;
+    camera.attachControl(canvas, true);
+    new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0,1,0), scene);
+    const dir = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(0,-1,1), scene);
+    dir.position = new BABYLON.Vector3(0,5,-5);
+
+    try {
+      // ── Load VRM ─────────────────────────────────────────────────────────────
+      statusEl.textContent = 'Loading VRM…';
+      await BABYLON.ImportMeshAsync(VRM_FILE, scene);
+      const vrmMgr = scene.metadata?.vrmManagers?.[0];
+      if (!vrmMgr) throw new Error('VRM manager not found');
+
+      const getBone = n => vrmMgr.humanoidBone?.[n] ?? vrmMgr.humanoidBone?.nodeMap?.[n];
+
+      // ARKitFaceDriver handles morph name mapping for VRM 0.x (jawOpen→t_MouthOpen_h etc.)
+      // and eye bone rotation. It does NOT touch head/neck bones — those are driven below.
+      const faceDriver = new ARKitFaceDriver(vrmMgr, scene);
+
+      // Head / neck pose — LAM head_pose: [pitch, yaw, roll] in radians
+      // The VRM __root__ has 180°Y so yaw and roll are negated to map camera→model space.
+      const headBone = getBone('head');
+      const neckBone = getBone('neck');
+      const headRestQ = headBone?.rotationQuaternion?.clone() ?? null;
+      const neckRestQ = neckBone?.rotationQuaternion?.clone() ?? null;
+
+      function applyHeadPose(pyr) {
+        if (!pyr) {
+          if (headBone && headRestQ) headBone.rotationQuaternion = headRestQ.clone();
+          if (neckBone && neckRestQ) neckBone.rotationQuaternion = neckRestQ.clone();
+          return;
+        }
+        const [pitch, yaw, roll] = pyr;
+        const hq = BABYLON.Quaternion.RotationYawPitchRoll(-yaw*0.7, pitch*0.7, -roll*0.7);
+        const nq = BABYLON.Quaternion.RotationYawPitchRoll(-yaw*0.3, pitch*0.3, -roll*0.3);
+        if (headBone && headRestQ) headBone.rotationQuaternion = headRestQ.multiply(hq);
+        if (neckBone && neckRestQ) neckBone.rotationQuaternion = neckRestQ.multiply(nq);
+      }
+
+      // ── Load VRMA — AnimatorAvatar retargeting ────────────────────────────────
+      // Manual restQ.multiply only fixes each bone's own local rest pose and misses
+      // the full-chain normalization (e.g. AIAN's 128° shoulder propagates into the
+      // upper arm's parent frame). AnimatorAvatar handles T-pose normalization in
+      // world space across the full hierarchy — same approach as babvrm.html / v8.
+      statusEl.textContent = 'Loading VRMA…';
+      BABYLON.TransformNode.prototype.getTotalVertices ??= function() { return 0; };
+
+      const animContainer  = await BABYLON.LoadAssetContainerAsync(VRMA_FILE, scene);
+      const vrmAnimMgr     = scene.metadata?.vrmAnimationManagers?.at(-1);
+      const animGroup      = animContainer.animationGroups[0];
+      if (!vrmAnimMgr?.animationMap || !animGroup) throw new Error('No animation data in VRMA');
+
+      // Build source→target name map for AnimatorAvatar
+      const mapNodeNames = new Map();
+      animGroup.targetedAnimations.forEach((ta, i) => {
+        const boneName = vrmAnimMgr.animationMap.get(i);
+        const bone = getBone(boneName);
+        if (bone && ta.target?.name) mapNodeNames.set(ta.target.name, bone.name);
+      });
+
+      const vrmRootMesh = scene.rootNodes?.find(n => n.name === '__root__') ?? scene.meshes?.[0];
+      const vrmAvatar   = new BABYLON.AnimatorAvatar('vrm-avatar', vrmRootMesh);
+      const bodyGroup   = vrmAvatar.retargetAnimationGroup(animGroup, {
+        animationGroupName:      'vrma-body',
+        fixRootPosition:         true,
+        rootNodeName:            getBone('hips')?.name,
+        groundReferenceNodeName: getBone('leftFoot')?.name,
+        mapNodeNames,
+      });
+
+      // v9: AnimationGroupMask — exclude head & neck so A2F head pose drives them
+      const maskNames = [headBone?.name, neckBone?.name].filter(Boolean);
+      if (maskNames.length && BABYLON.AnimationGroupMask) {
+        bodyGroup.mask = new BABYLON.AnimationGroupMask(
+          maskNames,
+          BABYLON.AnimationGroupMaskMode.Exclude
+        );
+      }
+      bodyGroup.stop();
+
+      // ── JSON parser — A2F compact or LAM format ───────────────────────────────
+      function parseJSON(json) {
+        const fps = json.metadata?.fps ?? 30;
+        // LAM: top-level "names" + "frames[].weights" + optional "head_pose"
+        if (Array.isArray(json.names) && json.frames?.[0]?.weights) {
+          return { fps, shapeNames: json.names,
+                   frames: json.frames.map(f => f.weights),
+                   headPose: json.head_pose ?? null };
+        }
+        // A2F compact
+        if (Array.isArray(json.metadata?.shapeNames) && Array.isArray(json.frames)) {
+          return { fps, shapeNames: json.metadata.shapeNames, frames: json.frames, headPose: null };
+        }
+        throw new Error('Unrecognised JSON format (expected A2F compact or LAM)');
+      }
+
+      // ── Load default A2F JSON ─────────────────────────────────────────────────
+      statusEl.textContent = 'Loading A2F JSON…';
+      let bsData = parseJSON(await fetch(A2F_JSON).then(r => r.json()));
+      descEl.textContent = `${VRMA_FILE} + ${A2F_JSON}${bsData.headPose ? ' (head pose ✓)' : ' (no head pose)'}`;
+      statusEl.textContent = 'Ready';
+      playBtn.disabled = false; stopBtn.disabled = false;
+
+      // File picker override
+      document.getElementById('jsonFile').addEventListener('change', async e => {
+        const file = e.target.files[0]; if (!file) return;
+        try {
+          bsData = parseJSON(JSON.parse(await file.text()));
+          descEl.textContent = `${VRMA_FILE} + ${file.name}${bsData.headPose ? ' (head pose ✓)' : ' (no head pose)'}`;
+        } catch(err) { statusEl.textContent = 'JSON error: ' + err.message; }
+        e.target.value = '';
+      });
+
+      // ── Playback ──────────────────────────────────────────────────────────────
+      let isPlaying = false, startTime = 0;
+
+      playBtn.addEventListener('click', () => {
+        isPlaying = !isPlaying;
+        if (isPlaying) {
+          startTime = performance.now();
+          bodyGroup.start(true);
+          playBtn.textContent = '⏸ Pause';
+        } else {
+          bodyGroup.pause();
+          playBtn.textContent = '▶ Play';
+        }
+      });
+
+      stopBtn.addEventListener('click', () => {
+        isPlaying = false;
+        startTime = 0;
+        bodyGroup.stop();
+        playBtn.textContent = '▶ Play';
+        faceDriver.reset();
+        applyHeadPose(null);
+      });
+
+      scene.onBeforeRenderObservable.add(() => {
+        if (!isPlaying || !bsData) return;
+        const elapsed  = (performance.now() - startTime) / 1000;
+        const frameIdx = Math.floor(elapsed * bsData.fps) % bsData.frames.length;
+        const weights  = bsData.frames[frameIdx];
+        for (let i = 0; i < bsData.shapeNames.length; i++) faceDriver.set(bsData.shapeNames[i], weights[i] ?? 0);
+        applyHeadPose(bsData.headPose ? bsData.headPose[frameIdx] : null);
+      });
+
+    } catch (e) {
+      console.error(e);
+      statusEl.textContent = 'Error: ' + e.message;
+    }
+
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener('resize', () => engine.resize());
+  </script>
+</body>
+</html>
