@@ -1,0 +1,32 @@
+{
+    "avatar": "../models/AIAN/AIAN_F_1_Casual.vrm",
+
+    "idle": {
+        "blinkIntervalMin": 2.0,
+        "blinkIntervalMax": 5.0,
+        "blinkDuration": 0.15,
+        "breathCycleSpeed": 0.4,
+        "breathJawAmount": 0.012
+    },
+
+    "clips": [
+        {
+            "id": "recite_1",
+            "animation": "animations/altaforte_frames.json",
+            "audio": "audio/altaforte.wav",
+            "delayAfter": 0
+        },
+        {
+            "id": "recite_2",
+            "animation": "animations/throughglass_frames.json",
+            "audio": "audio/through_glass.wav",
+            "delayAfter": 0
+        },
+        {
+            "id": "recite_3",
+            "animation": "animations/lightspent_frames.json",
+            "audio": "audio/lightspent.wav",
+            "delayAfter": 0
+        }
+    ]
+}

@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>A2F Avatar Scene</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+  <style>
+    html, body, #renderCanvas { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #111; }
+    #hud {
+      position: fixed; top: 20px; left: 20px;
+      color: white; font-family: monospace;
+      background: rgba(0,0,0,0.8); padding: 15px; border-radius: 5px;
+      pointer-events: none; font-size: 1.1em; z-index: 100; line-height: 1.6;
+    }
+    #hud .state { color: #0f0; }
+    #hud .clip  { color: #fa0; }
+    #controls {
+      position: fixed; bottom: 20px; left: 20px;
+      background: rgba(0,0,0,0.8); padding: 15px; border-radius: 5px;
+      z-index: 100; color: white; font-family: monospace;
+      display: flex; gap: 10px; align-items: center;
+    }
+    button {
+      background: #333; color: white; border: 1px solid #666;
+      padding: 8px 16px; font-family: monospace; cursor: pointer; border-radius: 3px;
+    }
+    button:hover { background: #555; }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+
+  <div id="hud">
+    <div id="status">Loading…</div>
+    <div>State: <span id="state-label" class="state">—</span></div>
+    <div>Clip: <span id="clip-label" class="clip">—</span></div>
+  </div>
+
+  <div id="controls">
+    <button id="btn-play-all">▶ Play Sequence</button>
+    <button id="btn-stop">■ Stop</button>
+  </div>
+
+  <script type="module">
+    import { A2FAvatar } from './A2FAvatar.js';
+
+    // ─── Scene setup ──────────────────────────────────────────────────────
+    const canvas = document.getElementById('renderCanvas');
+    const engine = new BABYLON.Engine(canvas, true);
+    engine.setHardwareScalingLevel(1);
+    const scene = new BABYLON.Scene(engine);
+
+    const camera = new BABYLON.ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 2 - 0.12, 1.5,
+      new BABYLON.Vector3(0, 1.55, 0), scene);
+    camera.attachControl(canvas, true);
+    camera.lowerRadiusLimit = 0.3;
+    camera.upperRadiusLimit = 8;
+
+    new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
+    const dir = new BABYLON.DirectionalLight('dir', new BABYLON.Vector3(-1, -2, -1), scene);
+    dir.intensity = 0.5;
+    const fill = new BABYLON.PointLight('fill', new BABYLON.Vector3(0, 1.6, -1), scene);
+    fill.intensity = 0.6;
+
+    // ─── Create avatar and load manifest ──────────────────────────────────
+    const avatar = new A2FAvatar(scene);
+
+    // Wire up UI
+    const statusEl    = document.getElementById('status');
+    const stateLabel  = document.getElementById('state-label');
+    const clipLabel   = document.getElementById('clip-label');
+
+    avatar.onStateChange = (state) => {
+      stateLabel.textContent = state;
+    };
+
+    avatar.onClipStart = (idx, id) => {
+      clipLabel.textContent = `${id} (${idx + 1}/${avatar.clips.length})`;
+    };
+
+    avatar.onClipEnd = (idx, id) => {
+      clipLabel.textContent = `${id} — done`;
+    };
+
+    avatar.onSequenceEnd = () => {
+      clipLabel.textContent = 'Sequence complete';
+    };
+
+    try {
+      statusEl.textContent = 'Loading manifest…';
+      await avatar.loadManifest('scene.json');
+      statusEl.textContent = `Ready — ${avatar.clips.length} clips loaded`;
+    } catch (e) {
+      statusEl.textContent = `Error: ${e.message}`;
+      console.error(e);
+    }
+
+    // ─── Controls ─────────────────────────────────────────────────────────
+    document.getElementById('btn-play-all').addEventListener('click', () => {
+      avatar.playSequence();
+    });
+
+    document.getElementById('btn-stop').addEventListener('click', () => {
+      avatar.stopAndReset();
+    });
+
+    // ─── Render loop ──────────────────────────────────────────────────────
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener('resize', () => engine.resize());
+  </script>
+</body>
+</html>
