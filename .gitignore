@@ -58,3 +58,4 @@ screenshots/
 
 # Claude Code local settings
 .claude/
+.venv
