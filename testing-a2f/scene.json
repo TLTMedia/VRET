@@ -1,6 +1,5 @@
 {
     "avatar": "../models/AIAN/AIAN_F_1_Casual.vrm",
-
     "idle": {
         "blinkIntervalMin": 2.0,
         "blinkIntervalMax": 5.0,

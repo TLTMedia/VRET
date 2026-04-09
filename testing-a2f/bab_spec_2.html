@@ -90,7 +90,7 @@
 
     try {
       statusEl.textContent = 'Loading manifest…';
-      await avatar.loadManifest('scene.json');
+      await avatar.loadManifest('scene2.json');
       statusEl.textContent = `Ready — ${avatar.clips.length} clips loaded`;
     } catch (e) {
       statusEl.textContent = `Error: ${e.message}`;
