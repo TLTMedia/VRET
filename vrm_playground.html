@@ -1,0 +1,267 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>VRM Playground — Babylon.js</title>
+  <script src="https://preview.babylonjs.com/babylon.js"></script>
+  <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+  <style>
+    html, body, #renderCanvas { width:100%; height:100%; margin:0; overflow:hidden; background:#111; }
+    #ui {
+      position:absolute; bottom:16px; left:50%; transform:translateX(-50%);
+      display:flex; flex-direction:column; align-items:center; gap:8px;
+      background:rgba(0,0,0,0.7); padding:12px 20px; border-radius:8px;
+      color:#fff; font:13px monospace; white-space:nowrap;
+    }
+    button { cursor:pointer; padding:5px 16px; }
+    #status { color:#aaa; font-size:11px; }
+  </style>
+</head>
+<body>
+<canvas id="renderCanvas"></canvas>
+<div id="ui">
+  <div style="font-weight:bold">VRM + VRMA — Babylon.js minimal demo</div>
+  <div id="status">initializing…</div>
+  <div style="display:flex;gap:8px">
+    <button id="defaultBtn">Default</button>
+    <button id="randomBtn">Random</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 1 — CONFIG
+// Local dev  : MANIFEST = 'manifest.json'  (served from same origin)
+// Playground : MANIFEST = 'https://tltmedia.github.io/VRET/manifest.json'
+// ═══════════════════════════════════════════════════════════════════════════════
+const MANIFEST = 'manifest.json';
+
+// Override asset base URLs for local dev — assets served from same origin.
+// Set to null to use manifest bases. Auto-detects localhost.
+const LOCAL_OVERRIDE = window.location.hostname === 'localhost' ? '' : null;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 2 — MINIMAL VRM LIBRARY  (~80 lines, no external dependencies)
+//
+// Registers three glTF extensions with Babylon's loader:
+//   • VRMC_vrm         — VRM 1.0 model  (humanoid bone map)
+//   • VRM              — VRM 0.x model  (humanoid bone map)
+//   • VRMC_vrm_animation — VRMA animation (channel → bone name map)
+//
+// After load, each populates scene.metadata so the scene code can access bones
+// without knowing the internal node names of any specific model.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// AnimatorAvatar walks the hierarchy calling getTotalVertices() to distinguish
+// meshes from transform nodes. TransformNode doesn't have this method — patch it
+// to return 0 ("no vertices = not a mesh") so AnimatorAvatar can walk VRMA skeletons.
+BABYLON.TransformNode.prototype.getTotalVertices ??= () => 0;
+
+(function registerVRMExtensions() {
+  function tryRegister() {
+    const GL = BABYLON?.GLTF2?.GLTFLoader;
+    if (!GL) { setTimeout(tryRegister, 50); return; }
+
+    // ── VRM 1.0: humanBones is an OBJECT  { hips: { node: 0 }, … } ──────────
+    GL.RegisterExtension('VRMC_vrm', loader => ({
+      name: 'VRMC_vrm', enabled: true, dispose() {},
+      onReady() {
+        const ext = loader.gltf?.extensions?.VRMC_vrm;
+        if (!ext?.humanoid?.humanBones) return;
+        const nodeMap = buildNodeMap(loader, Object.entries(ext.humanoid.humanBones)
+          .map(([bone, d]) => ({ bone, node: d.node })));
+        pushVrmManager(loader.babylonScene, nodeMap, { isVRM1: true });
+      }
+    }));
+
+    // ── VRM 0.x: humanBones is an ARRAY  [{ bone: "hips", node: 0 }, …] ─────
+    GL.RegisterExtension('VRM', loader => ({
+      name: 'VRM', enabled: true, dispose() {},
+      onReady() {
+        const ext = loader.gltf?.extensions?.VRM;
+        if (!Array.isArray(ext?.humanoid?.humanBones)) return;
+        const nodeMap = buildNodeMap(loader, ext.humanoid.humanBones);
+        pushVrmManager(loader.babylonScene, nodeMap, { isVRM0: true });
+      }
+    }));
+
+    // ── VRMA: maps animation CHANNEL INDEX → humanoid bone name ──────────────
+    // Keys must be channel indices (0,1,2…) to match targetedAnimations.forEach.
+    // humanBones uses glTF node indices (e.g. hips=37), so we go via the
+    // animation channels array to build the correct channel-index → bone map.
+    GL.RegisterExtension('VRMC_vrm_animation', loader => ({
+      name: 'VRMC_vrm_animation', enabled: true, dispose() {},
+      onReady() {
+        const ext = loader.gltf?.extensions?.VRMC_vrm_animation;
+        if (!ext?.humanoid?.humanBones) return;
+
+        // Step 1: node index → humanoid bone name
+        const nodeToBone = new Map();
+        for (const [bone, data] of Object.entries(ext.humanoid.humanBones))
+          if (data.node != null) nodeToBone.set(data.node, bone);
+
+        // Step 2: channel index → bone name  (matches targetedAnimations[i])
+        const animationMap = new Map();
+        const channels = loader.gltf.animations?.[0]?.channels ?? [];
+        channels.forEach((ch, i) => {
+          const bone = nodeToBone.get(ch.target?.node);
+          if (bone) animationMap.set(i, bone);
+        });
+
+        const scene = loader.babylonScene;
+        scene.metadata ??= {};
+        (scene.metadata.vrmAnimationManagers ??= []).push({ animationMap });
+        console.log('[VRM] VRMA channel map:', animationMap.size, 'bones');
+      }
+    }));
+
+    // ── File extension aliases: tell Babylon .vrm/.vrma = binary glTF ────────
+    // Without babylon-vrm-loader, Babylon doesn't recognise .vrm/.vrma as glTF.
+    // SceneLoader.RegisterPlugin maps those extensions to the GLTF loader.
+    BABYLON.SceneLoader.RegisterPlugin({
+      name: 'vrm-glb-alias',
+      extensions: { '.vrm': { isBinary: true }, '.vrma': { isBinary: true } },
+      loadFile(scene, fileOrUrl, rootUrl, onSuccess, onProgress, useArrayBuffer) {
+        // Delegate to the built-in GLTF loader by reloading as .glb
+        const gltf = new BABYLON.GLTF2.GLTFFileLoader();
+        return gltf.loadFile(scene, fileOrUrl, rootUrl, onSuccess, onProgress, useArrayBuffer);
+      },
+      load(scene, data, rootUrl, onSuccess, onError) {
+        const gltf = new BABYLON.GLTF2.GLTFFileLoader();
+        return gltf.load(scene, data, rootUrl, onSuccess, onError);
+      },
+      loadAssets(scene, data, rootUrl, onSuccess) {
+        const gltf = new BABYLON.GLTF2.GLTFFileLoader();
+        return gltf.loadAssets(scene, data, rootUrl, onSuccess);
+      },
+      importMeshAsync(meshesNames, scene, data, rootUrl, onProgress, fileName) {
+        const gltf = new BABYLON.GLTF2.GLTFFileLoader();
+        return gltf.importMeshAsync(meshesNames, scene, data, rootUrl, onProgress, fileName);
+      },
+      loadAssetContainerAsync(scene, data, rootUrl, onProgress, fileName) {
+        const gltf = new BABYLON.GLTF2.GLTFFileLoader();
+        return gltf.loadAssetContainerAsync(scene, data, rootUrl, onProgress, fileName);
+      },
+      canDirectLoad() { return false; },
+      createPlugin() { return new BABYLON.GLTF2.GLTFFileLoader(); },
+    });
+
+    console.log('[VRM] extensions registered (VRM 0.x + 1.0 + VRMA)');
+  }
+
+  // Shared helpers ─────────────────────────────────────────────────────────────
+  function buildNodeMap(loader, boneDefs) {
+    const byName = new Map();
+    for (const n of loader.babylonScene.transformNodes) byName.set(n.name, n);
+    for (const m of loader.babylonScene.meshes) if (!byName.has(m.name)) byName.set(m.name, m);
+    const nodeMap = {};
+    for (const { bone, node } of boneDefs) {
+      const n = byName.get(loader.gltf.nodes?.[node]?.name);
+      if (n) nodeMap[bone] = n;
+    }
+    return nodeMap;
+  }
+
+  function pushVrmManager(scene, nodeMap, flags) {
+    scene.metadata ??= {};
+    (scene.metadata.vrmManagers ??= []).push({ humanoidBone: { ...nodeMap, nodeMap }, ...flags });
+    console.log(`[VRM] mapped ${Object.keys(nodeMap).length} bones`);
+  }
+
+  tryRegister();
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 3 — SCENE
+// This is the part that maps 1:1 to a Babylon Playground createScene() function.
+// ═══════════════════════════════════════════════════════════════════════════════
+(async () => {
+  const canvas  = document.getElementById('renderCanvas');
+  const engine  = new BABYLON.Engine(canvas, true);
+  const scene   = new BABYLON.Scene(engine);
+  const statusEl = document.getElementById('status');
+
+  const camera = new BABYLON.ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 2.2, 3.5,
+    new BABYLON.Vector3(0, 1, 0), scene);
+  camera.wheelPrecision = 50;
+  camera.minZ = 0.1;
+  camera.attachControl(canvas, true);
+  new BABYLON.HemisphericLight('hemi', new BABYLON.Vector3(0, 1, 0), scene);
+
+  // Fetch the asset manifest ──────────────────────────────────────────────────
+  const manifest  = await fetch(MANIFEST).then(r => r.json());
+  const VRM_BASE  = LOCAL_OVERRIDE ?? manifest.vrmBase;  // raw.githubusercontent.com in production
+  const VRMA_BASE = LOCAL_OVERRIDE ?? manifest.vrmaBase; // GitHub Pages in production
+
+  // Load a VRM + VRMA pair ────────────────────────────────────────────────────
+  let currentGroup = null;
+
+  async function loadPair(vrmPath, vrmaPath) {
+    statusEl.textContent = `Loading ${vrmPath.split('/').pop()}…`;
+    if (currentGroup) { currentGroup.stop(); currentGroup = null; }
+
+    // Dispose previous model
+    scene.meshes.slice().forEach(m => m.dispose());
+    scene.transformNodes.slice().forEach(n => n.dispose());
+    scene.animationGroups.slice().forEach(g => g.dispose());
+    scene.metadata = {};
+
+    // Load VRM model
+    await BABYLON.ImportMeshAsync(VRM_BASE + vrmPath, scene);
+    const vrmMgr = scene.metadata.vrmManagers?.[0];
+    if (!vrmMgr) throw new Error('VRM manager not found — is this a valid VRM file?');
+    const getBone = name => vrmMgr.humanoidBone?.[name];
+
+    // Load VRMA animation
+    statusEl.textContent = `Loading ${vrmaPath.split('/').pop()}…`;
+    const container  = await BABYLON.LoadAssetContainerAsync(VRMA_BASE + vrmaPath, scene);
+    const vrmAnimMgr = scene.metadata.vrmAnimationManagers?.at(-1);
+    const animGroup  = container.animationGroups[0];
+    if (!vrmAnimMgr?.animationMap || !animGroup)
+      throw new Error('No animation data found in VRMA');
+
+    const mapNodeNames = new Map();
+    animGroup.targetedAnimations.forEach((ta, i) => {
+      const boneName = vrmAnimMgr.animationMap.get(i);
+      const bone     = boneName ? getBone(boneName) : null;
+      if (bone && ta.target?.name) mapNodeNames.set(ta.target.name, bone.name);
+    });
+
+    // AnimatorAvatar handles T-pose normalisation across the full bone hierarchy —
+    // necessary for models with non-identity rest poses (VRM 0.x pipeline exports).
+    const root   = scene.rootNodes.find(n => n.name === '__root__') ?? scene.meshes[0];
+    const avatar = new BABYLON.AnimatorAvatar('avatar', root);
+    currentGroup = avatar.retargetAnimationGroup(animGroup, {
+      animationGroupName:      'body',
+      fixRootPosition:         true,
+      rootNodeName:            getBone('hips')?.name,
+      groundReferenceNodeName: getBone('leftFoot')?.name,
+      mapNodeNames,
+    });
+    currentGroup.start(true);
+
+    statusEl.textContent = `Ready — ${vrmPath.split('/').pop()}  +  ${vrmaPath.split('/').pop()}`;
+    window.animationReady = true;
+  }
+
+  // Load the default template pair on startup
+  await loadPair(manifest.default.vrm, manifest.default.vrma)
+    .catch(e => { statusEl.textContent = 'Error: ' + e.message; console.error(e); });
+
+  // Buttons
+  document.getElementById('defaultBtn').addEventListener('click', () =>
+    loadPair(manifest.default.vrm, manifest.default.vrma)
+      .catch(e => { statusEl.textContent = 'Error: ' + e.message; }));
+
+  document.getElementById('randomBtn').addEventListener('click', () => {
+    const vrm  = manifest.vrm [Math.floor(Math.random() * manifest.vrm.length)];
+    const vrma = manifest.vrma[Math.floor(Math.random() * manifest.vrma.length)];
+    loadPair(vrm, vrma).catch(e => { statusEl.textContent = 'Error: ' + e.message; });
+  });
+
+  engine.runRenderLoop(() => scene.render());
+  window.addEventListener('resize', () => engine.resize());
+})();
+</script>
+</body>
+</html>
