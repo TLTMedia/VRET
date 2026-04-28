@@ -1,5 +1,5 @@
 {
-    "avatar": "../models/AIAN/AIAN_F_2_Milit.vrm",
+    "avatar": "../models/Hispanic/Hispanic_M_1_Milit.vrm",
     "idle": {
         "blinkIntervalMin": 2.0,
         "blinkIntervalMax": 5.0,
@@ -7,8 +7,13 @@
         "breathCycleSpeed": 0.4,
         "breathJawAmount": 0.05
     },
-
     "clips": [
+        {
+            "id": "wait_1",
+            "animation": null,
+            "audio": null,
+            "delayAfter": 18
+        },
         {
             "id": "recite_1",
             "animation": "animations/goodly_frames.json",

@@ -1,6 +1,6 @@
 import { Scene } from "@babylonjs/core/scene";
 import { Engine } from "@babylonjs/core/Engines/engine";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Vector3, Quaternion } from "@babylonjs/core/Maths/math.vector";
 import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader";
 import { ImportMeshAsync } from "@babylonjs/core/Loading/sceneLoader";
 import { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
@@ -38,6 +38,8 @@ import "@babylonjs/loaders/glTF";
 	...(window as any).BABYLON,
 	ImportMeshAsync,
 	SceneLoader,
+	Quaternion,
+	Vector3,
 };
 
 // @ts-ignore
@@ -103,21 +105,52 @@ export class App {
 		const avatar = new A2FAvatar(this.scene);
 		await avatar.loadManifest('../scene.json');
 
+		const secondCharacter = new A2FAvatar(this.scene);
+		await secondCharacter.loadManifest('../scene2.json');
+
 		console.log('[App] Avatar loaded. rootNode:', avatar.rootNode?.name,
 			'faceMesh:', avatar.faceMesh?.name, 'clips:', avatar.clips.length);
 
 		if (avatar.rootNode) {
-			avatar.rootNode.position = new Vector3(5000, 4.5, -400);
+			avatar.rootNode.position = new Vector3(5000, 5.5, -400);
 			// Scene uses cm units (gravity -981), VRM uses meters — scale up 100x
 			avatar.rootNode.rotation = new Vector3(0, -4 * Math.PI / 3, 0);
 			avatar.rootNode.scaling = new Vector3(175, 175, 175);
 		}
 
+		if (secondCharacter.rootNode) {
+			secondCharacter.rootNode.position = new Vector3(5300, 5.5, -600);
+			// Scene uses cm units (gravity -981), VRM uses meters — scale up 100x
+			secondCharacter.rootNode.rotation = new Vector3(0, -1 * Math.PI / 3, 0);
+			secondCharacter.rootNode.scaling = new Vector3(175, 175, 175);
+		}
+
+		// Drop arms from T-pose to sides by rotating each upper-arm bone.
+		// Search descendants of each avatar's root so we don't pick up bones
+		// from a sibling avatar that share the same name.
+		const findBoneIn = (root: any, name: string) => {
+			const descendants = root.getDescendants(false);
+			return descendants.find((t: any) => t.name === name)
+				?? descendants.find((t: any) => t.name.toLowerCase().includes(name.toLowerCase()));
+		};
+		const armDown = (75 * Math.PI) / 180;
+		for (const root of [avatar.rootNode, secondCharacter.rootNode]) {
+			if (!root) continue;
+			const leftArm  = findBoneIn(root, 'LeftArm');
+			const rightArm = findBoneIn(root, 'RightArm');
+			if (leftArm)  leftArm.rotationQuaternion  = Quaternion.RotationAxis(new Vector3(1, 0, 0), -armDown);
+			if (rightArm) rightArm.rotationQuaternion = Quaternion.RotationAxis(new Vector3(1, 0, 0), -armDown);
+		}
+		// console.log('[App] shoulder bones:', leftUpperArm?.name, rightUpperArm?.name);
+
+		// Apply VRMA animation to the avatar
+		//await avatar.applyVRMA('../vrma/05_01.vrma');
+
 		// Build clip playback UI
-		this._createAvatarUI(avatar);
+		this._createAvatarUI(avatar, secondCharacter);
 	}
 
-	private _createAvatarUI(avatar: any): void {
+	private _createAvatarUI(avatar: any, secondCharacter:any): void {
 		const container = document.createElement('div');
 		container.style.cssText = 'position:fixed;top:16px;right:16px;display:flex;flex-direction:column;gap:8px;z-index:50;';
 
@@ -131,13 +164,20 @@ export class App {
 			return btn;
 		};
 
-		container.appendChild(makeBtn('Play All', () => avatar.playSequence()));
+		container.appendChild(makeBtn('Play All', 
+			() => {
+				avatar.playSequence();
+				secondCharacter.playSequence();
+			}));
 
-		avatar.clips.forEach((clip: any, i: number) => {
-			container.appendChild(makeBtn(clip.id, () => avatar.playClip(i)));
-		});
+		// avatar.clips.forEach((clip: any, i: number) => {
+		// 	container.appendChild(makeBtn(clip.id, () => avatar.playClip(i)));
+		// });
 
-		container.appendChild(makeBtn('Stop', () => avatar.stopAndReset()));
+		container.appendChild(makeBtn('Stop', () => {
+			avatar.stopAndReset();
+			secondCharacter.stopAndReset();
+		}));
 
 		document.body.appendChild(container);
 	}

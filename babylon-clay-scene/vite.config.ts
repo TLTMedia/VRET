@@ -10,7 +10,7 @@ export default defineConfig({
       name: 'serve-parent-models',
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
-          if (req.url?.startsWith('/models/')) {
+          if (req.url?.startsWith('/models/') || req.url?.startsWith('/vrma/')) {
             const filePath = path.resolve(__dirname, '..', req.url.slice(1));
             if (fs.existsSync(filePath)) {
               res.setHeader('Content-Type', 'application/octet-stream');

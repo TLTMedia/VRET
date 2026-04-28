@@ -135,10 +135,23 @@ export class A2FAvatar {
 
     this.clips = [];
     for (const entry of this.manifest.clips) {
-      const animResp = await fetch(entry.animation);
-      if (!animResp.ok) throw new Error(`Failed to load animation ${entry.animation}: HTTP ${animResp.status}`);
-      const animData = await animResp.json();
-      this.clips.push({ animData, audioSrc: entry.audio, id: entry.id, delayAfter: entry.delayAfter ?? 1.0 });
+      // Treat "N/A", missing, or unfetchable animation/audio paths as absent —
+      // a clip with neither becomes a no-op used for explicit waits via delayAfter.
+      let animData = null;
+      if (entry.animation && entry.animation !== 'N/A') {
+        const animResp = await fetch(entry.animation);
+        if (animResp.ok) {
+          try {
+            animData = await animResp.json();
+          } catch (e) {
+            console.warn(`[A2FAvatar] Animation ${entry.animation} did not parse as JSON — skipping:`, e.message);
+          }
+        } else {
+          console.warn(`[A2FAvatar] Animation ${entry.animation} returned HTTP ${animResp.status} — skipping`);
+        }
+      }
+      const audioSrc = (entry.audio && entry.audio !== 'N/A') ? entry.audio : null;
+      this.clips.push({ animData, audioSrc, id: entry.id, delayAfter: entry.delayAfter ?? 1.0 });
     }
 
     this._setState(State.IDLE);
@@ -151,9 +164,13 @@ export class A2FAvatar {
     const result = await BABYLON.ImportMeshAsync(vrmPath, this.scene, { pluginExtension: ".glb" });
     this.rootNode = result.meshes[0] || null;
 
-    this.faceMesh      = this.scene.getMeshByName('H_DDS_HighRes');
-    const teethDown    = this.scene.getMeshByName('h_TeethDown');
-    const teethUp      = this.scene.getMeshByName('h_TeethUp');
+    // Search within the just-loaded meshes only — getMeshByName on the scene
+    // returns the first match across ALL avatars, which collides with same-named
+    // meshes from other A2FAvatar instances.
+    const ownMeshes    = result.meshes;
+    this.faceMesh      = ownMeshes.find(m => m.name === 'H_DDS_HighRes') || null;
+    const teethDown    = ownMeshes.find(m => m.name === 'h_TeethDown') || null;
+    const teethUp      = ownMeshes.find(m => m.name === 'h_TeethUp') || null;
 
     this.faceMap       = buildMorphMap(this.faceMesh);
     this.teethDownMap  = buildMorphMap(teethDown);
@@ -163,6 +180,53 @@ export class A2FAvatar {
       console.error('[A2FAvatar] H_DDS_HighRes mesh not found. Available meshes:',
         this.scene.meshes.map(m => m.name));
     }
+  }
+
+  /**
+   * Load a VRMA animation file and apply it to this avatar's skeleton.
+   * Retargets each animation track to the VRM's transform node with the
+   * same name (VRM humanoid naming convention: "hips", "spine", etc.).
+   *
+   * @param {string} vrmaPath - URL of the .vrma file
+   * @param {object} [opts]
+   * @param {boolean} [opts.loop=true]
+   * @param {number}  [opts.speed=1.0]
+   * @returns {Promise<BABYLON.AnimationGroup|null>}
+   */
+  async applyVRMA(vrmaPath, opts = {}) {
+    const loop  = opts.loop  ?? true;
+    const speed = opts.speed ?? 1.0;
+
+    // Snapshot avatar's transform nodes BEFORE loading VRMA so we can
+    // distinguish them from the VRMA's own loaded nodes.
+    const avatarNodes = new Map();
+    for (const tn of this.scene.transformNodes) avatarNodes.set(tn.name, tn);
+    for (const m  of this.scene.meshes)         avatarNodes.set(m.name,  m);
+
+    const result = await BABYLON.ImportMeshAsync(vrmaPath, this.scene, { pluginExtension: ".glb" });
+
+    // Hide any dummy meshes the VRMA loaded (VRMA is animation-only)
+    result.meshes.forEach(m => m.setEnabled(false));
+
+    if (!result.animationGroups || result.animationGroups.length === 0) {
+      console.warn(`[A2FAvatar] No animation groups found in ${vrmaPath}`);
+      return null;
+    }
+
+    let retargeted = null;
+    for (const animGroup of result.animationGroups) {
+      const clone = animGroup.clone(
+        `${animGroup.name}_retargeted`,
+        (origTarget) => avatarNodes.get(origTarget?.name) || origTarget
+      );
+      clone.start(loop, speed);
+      retargeted = retargeted || clone;
+      // Stop & dispose the un-retargeted original so it doesn't fight the clone
+      animGroup.stop();
+      animGroup.dispose();
+    }
+
+    return retargeted;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -231,6 +295,9 @@ export class A2FAvatar {
 
     const clip = this.clips[index];
     this.currentClipIdx = index;
+
+    // No animation and no audio → pure no-op (used for explicit waits via delayAfter)
+    if (!clip.animData && !clip.audioSrc) return;
 
     // Load audio
     this.audio = null;
