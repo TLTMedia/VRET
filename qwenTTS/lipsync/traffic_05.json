@@ -1,0 +1,268 @@
+{
+  "metadata": {
+    "soundFile": "qwenTTS/output_custom_voice_5.wav",
+    "duration": 6.32
+  },
+  "mouthCues": [
+    {
+      "start": 0.0,
+      "end": 0.08,
+      "value": "X"
+    },
+    {
+      "start": 0.08,
+      "end": 0.22,
+      "value": "B"
+    },
+    {
+      "start": 0.22,
+      "end": 0.35,
+      "value": "C"
+    },
+    {
+      "start": 0.35,
+      "end": 0.45,
+      "value": "D"
+    },
+    {
+      "start": 0.45,
+      "end": 0.58,
+      "value": "E"
+    },
+    {
+      "start": 0.58,
+      "end": 0.71,
+      "value": "F"
+    },
+    {
+      "start": 0.71,
+      "end": 0.8,
+      "value": "H"
+    },
+    {
+      "start": 0.8,
+      "end": 0.9,
+      "value": "A"
+    },
+    {
+      "start": 0.9,
+      "end": 1.02,
+      "value": "G"
+    },
+    {
+      "start": 1.02,
+      "end": 1.13,
+      "value": "B"
+    },
+    {
+      "start": 1.13,
+      "end": 1.29,
+      "value": "C"
+    },
+    {
+      "start": 1.29,
+      "end": 1.43,
+      "value": "D"
+    },
+    {
+      "start": 1.43,
+      "end": 1.54,
+      "value": "E"
+    },
+    {
+      "start": 1.54,
+      "end": 1.65,
+      "value": "F"
+    },
+    {
+      "start": 1.65,
+      "end": 1.77,
+      "value": "H"
+    },
+    {
+      "start": 1.77,
+      "end": 1.89,
+      "value": "A"
+    },
+    {
+      "start": 1.89,
+      "end": 2.04,
+      "value": "G"
+    },
+    {
+      "start": 2.04,
+      "end": 2.15,
+      "value": "B"
+    },
+    {
+      "start": 2.15,
+      "end": 2.28,
+      "value": "C"
+    },
+    {
+      "start": 2.28,
+      "end": 2.43,
+      "value": "D"
+    },
+    {
+      "start": 2.43,
+      "end": 2.54,
+      "value": "E"
+    },
+    {
+      "start": 2.54,
+      "end": 2.66,
+      "value": "F"
+    },
+    {
+      "start": 2.66,
+      "end": 2.76,
+      "value": "H"
+    },
+    {
+      "start": 2.76,
+      "end": 2.89,
+      "value": "A"
+    },
+    {
+      "start": 2.89,
+      "end": 3.05,
+      "value": "G"
+    },
+    {
+      "start": 3.05,
+      "end": 3.16,
+      "value": "B"
+    },
+    {
+      "start": 3.16,
+      "end": 3.29,
+      "value": "C"
+    },
+    {
+      "start": 3.29,
+      "end": 3.39,
+      "value": "D"
+    },
+    {
+      "start": 3.39,
+      "end": 3.55,
+      "value": "E"
+    },
+    {
+      "start": 3.55,
+      "end": 3.67,
+      "value": "F"
+    },
+    {
+      "start": 3.67,
+      "end": 3.77,
+      "value": "H"
+    },
+    {
+      "start": 3.77,
+      "end": 3.91,
+      "value": "A"
+    },
+    {
+      "start": 3.91,
+      "end": 4.01,
+      "value": "G"
+    },
+    {
+      "start": 4.01,
+      "end": 4.15,
+      "value": "B"
+    },
+    {
+      "start": 4.15,
+      "end": 4.24,
+      "value": "C"
+    },
+    {
+      "start": 4.24,
+      "end": 4.38,
+      "value": "D"
+    },
+    {
+      "start": 4.38,
+      "end": 4.54,
+      "value": "E"
+    },
+    {
+      "start": 4.54,
+      "end": 4.68,
+      "value": "F"
+    },
+    {
+      "start": 4.68,
+      "end": 4.79,
+      "value": "H"
+    },
+    {
+      "start": 4.79,
+      "end": 4.92,
+      "value": "A"
+    },
+    {
+      "start": 4.92,
+      "end": 5.01,
+      "value": "G"
+    },
+    {
+      "start": 5.01,
+      "end": 5.1,
+      "value": "B"
+    },
+    {
+      "start": 5.1,
+      "end": 5.26,
+      "value": "C"
+    },
+    {
+      "start": 5.26,
+      "end": 5.39,
+      "value": "D"
+    },
+    {
+      "start": 5.39,
+      "end": 5.49,
+      "value": "E"
+    },
+    {
+      "start": 5.49,
+      "end": 5.63,
+      "value": "F"
+    },
+    {
+      "start": 5.63,
+      "end": 5.74,
+      "value": "H"
+    },
+    {
+      "start": 5.74,
+      "end": 5.84,
+      "value": "A"
+    },
+    {
+      "start": 5.84,
+      "end": 5.97,
+      "value": "G"
+    },
+    {
+      "start": 5.97,
+      "end": 6.13,
+      "value": "B"
+    },
+    {
+      "start": 6.13,
+      "end": 6.24,
+      "value": "C"
+    },
+    {
+      "start": 6.24,
+      "end": 6.32,
+      "value": "X"
+    }
+  ]
+}

@@ -1,0 +1,179 @@
+{
+  "metadata": {
+    "title": "The Traffic Stop",
+    "description": "A tense traffic stop escalation between Jordan and Officer Miller",
+    "environment": "night_street",
+    "sourceAnimation": "vrma/15_05.vrma",
+    "note": "VRMA segments must be generated in Blender: load 15_05.vrma, divide into 12 equal segments, run triple-layer export for each to produce seg_NN_root/body/face.vrma in vrma/traffic/"
+  },
+  "actors": [
+    {
+      "id": "jordan",
+      "vrm": "models/Black/Black_M_1_Casual.vrm",
+      "startPosition": { "x": 0, "y": 0, "z": 0 }
+    },
+    {
+      "id": "officer",
+      "vrm": "models/White/White_M_1_Util.vrm",
+      "startPosition": { "x": 1.2, "y": 0, "z": 0.3 }
+    }
+  ],
+  "timeline": [
+    {
+      "start": 0.0,
+      "duration": 3.92,
+      "actor": "officer",
+      "description": "Window down all the way. Hands on the wheel. Now.",
+      "audio": "qwenTTS/output_custom_voice_0.wav",
+      "lipSync": "qwenTTS/lipsync/traffic_00.json",
+      "layers": {
+        "ROOT": "vrma/traffic/seg_00_root.vrma",
+        "BODY": "vrma/traffic/seg_00_body.vrma",
+        "FACE": "vrma/traffic/seg_00_face.vrma"
+      }
+    },
+    {
+      "start": 4.92,
+      "duration": 3.04,
+      "actor": "jordan",
+      "description": "What? I'm already late.",
+      "audio": "qwenTTS/output_custom_voice_1.wav",
+      "lipSync": "qwenTTS/lipsync/traffic_01.json",
+      "layers": {
+        "ROOT": "vrma/traffic/seg_01_root.vrma",
+        "BODY": "vrma/traffic/seg_01_body.vrma",
+        "FACE": "vrma/traffic/seg_01_face.vrma"
+      }
+    },
+    {
+      "start": 8.96,
+      "duration": 5.36,
+      "actor": "officer",
+      "description": "I said both hands, son. Put that right hand where I can see it.",
+      "audio": "qwenTTS/output_custom_voice_2.wav",
+      "lipSync": "qwenTTS/lipsync/traffic_02.json",
+      "layers": {
+        "ROOT": "vrma/traffic/seg_02_root.vrma",
+        "BODY": "vrma/traffic/seg_02_body.vrma",
+        "FACE": "vrma/traffic/seg_02_face.vrma"
+      }
+    },
+    {
+      "start": 15.32,
+      "duration": 7.36,
+      "actor": "jordan",
+      "description": "It's in my lap, man. I'm just trying to get my phone. I have rights, you know. Why did you even pull me over?",
+      "audio": "qwenTTS/output_custom_voice_3.wav",
+      "lipSync": "qwenTTS/lipsync/traffic_03.json",
+      "layers": {
+        "ROOT": "vrma/traffic/seg_03_root.vrma",
+        "BODY": "vrma/traffic/seg_03_body.vrma",
+        "FACE": "vrma/traffic/seg_03_face.vrma"
+      }
+    },
+    {
+      "start": 23.68,
+      "duration": 8.24,
+      "actor": "officer",
+      "description": "You're going to keep your hands on that wheel and stop reaching into your lap. Is there a weapon in this vehicle?",
+      "audio": "qwenTTS/output_custom_voice_4.wav",
+      "lipSync": "qwenTTS/lipsync/traffic_04.json",
+      "layers": {
+        "ROOT": "vrma/traffic/seg_04_root.vrma",
+        "BODY": "vrma/traffic/seg_04_body.vrma",
+        "FACE": "vrma/traffic/seg_04_face.vrma"
+      }
+    },
+    {
+      "start": 32.92,
+      "duration": 6.32,
+      "actor": "jordan",
+      "description": "A weapon? Are you serious? I'm an honor student. I don't have a weapon. I'm just reaching for my—",
+      "audio": "qwenTTS/output_custom_voice_5.wav",
+      "lipSync": "qwenTTS/lipsync/traffic_05.json",
+      "layers": {
+        "ROOT": "vrma/traffic/seg_05_root.vrma",
+        "BODY": "vrma/traffic/seg_05_body.vrma",
+        "FACE": "vrma/traffic/seg_05_face.vrma"
+      }
+    },
+    {
+      "start": 40.24,
+      "duration": 5.76,
+      "actor": "officer",
+      "description": "DON'T REACH! Every time you move your hand off that wheel, you're making a mistake. Do you understand me?",
+      "audio": "qwenTTS/output_custom_voice_6.wav",
+      "lipSync": "qwenTTS/lipsync/traffic_06.json",
+      "layers": {
+        "ROOT": "vrma/traffic/seg_06_root.vrma",
+        "BODY": "vrma/traffic/seg_06_body.vrma",
+        "FACE": "vrma/traffic/seg_06_face.vrma"
+      }
+    },
+    {
+      "start": 47.0,
+      "duration": 3.92,
+      "actor": "jordan",
+      "description": "Look, I'll just show you my ID so we can be done!",
+      "audio": "qwenTTS/output_custom_voice_7.wav",
+      "lipSync": "qwenTTS/lipsync/traffic_07.json",
+      "layers": {
+        "ROOT": "vrma/traffic/seg_07_root.vrma",
+        "BODY": "vrma/traffic/seg_07_body.vrma",
+        "FACE": "vrma/traffic/seg_07_face.vrma"
+      }
+    },
+    {
+      "start": 51.92,
+      "duration": 6.08,
+      "actor": "officer",
+      "description": "STAY STILL! DON'T MOVE! Hands on the ceiling! Get your hands up on the ceiling of the car right now!",
+      "audio": "qwenTTS/output_custom_voice_8.wav",
+      "lipSync": "qwenTTS/lipsync/traffic_08.json",
+      "layers": {
+        "ROOT": "vrma/traffic/seg_08_root.vrma",
+        "BODY": "vrma/traffic/seg_08_body.vrma",
+        "FACE": "vrma/traffic/seg_08_face.vrma"
+      }
+    },
+    {
+      "start": 59.0,
+      "duration": 5.20,
+      "actor": "jordan",
+      "description": "I... I was just getting my wallet. My hands are up. Look. My hands are up.",
+      "audio": "qwenTTS/output_custom_voice_9.wav",
+      "lipSync": "qwenTTS/lipsync/traffic_09.json",
+      "layers": {
+        "ROOT": "vrma/traffic/seg_09_root.vrma",
+        "BODY": "vrma/traffic/seg_09_body.vrma",
+        "FACE": "vrma/traffic/seg_09_face.vrma"
+      }
+    },
+    {
+      "start": 65.2,
+      "duration": 9.92,
+      "actor": "officer",
+      "description": "Slowly... use your left hand to open the door from the outside handle. Keep the other hand on the ceiling. If you drop that hand, we're going to have a very different conversation.",
+      "audio": "qwenTTS/output_custom_voice_10.wav",
+      "lipSync": "qwenTTS/lipsync/traffic_10.json",
+      "layers": {
+        "ROOT": "vrma/traffic/seg_10_root.vrma",
+        "BODY": "vrma/traffic/seg_10_body.vrma",
+        "FACE": "vrma/traffic/seg_10_face.vrma"
+      }
+    },
+    {
+      "start": 76.12,
+      "duration": 5.04,
+      "actor": "jordan",
+      "description": "Okay. Okay. I'm opening it. Don't... please don't do anything. I'm opening the door.",
+      "audio": "qwenTTS/output_custom_voice_11.wav",
+      "lipSync": "qwenTTS/lipsync/traffic_11.json",
+      "layers": {
+        "ROOT": "vrma/traffic/seg_11_root.vrma",
+        "BODY": "vrma/traffic/seg_11_body.vrma",
+        "FACE": "vrma/traffic/seg_11_face.vrma"
+      }
+    }
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "metadata": {
+    "soundFile": "qwenTTS/output_custom_voice_1.wav",
+    "duration": 3.04
+  },
+  "mouthCues": [
+    {
+      "start": 0.0,
+      "end": 0.08,
+      "value": "X"
+    },
+    {
+      "start": 0.08,
+      "end": 0.22,
+      "value": "B"
+    },
+    {
+      "start": 0.22,
+      "end": 0.31,
+      "value": "C"
+    },
+    {
+      "start": 0.31,
+      "end": 0.4,
+      "value": "D"
+    },
+    {
+      "start": 0.4,
+      "end": 0.52,
+      "value": "E"
+    },
+    {
+      "start": 0.52,
+      "end": 0.65,
+      "value": "F"
+    },
+    {
+      "start": 0.65,
+      "end": 0.77,
+      "value": "H"
+    },
+    {
+      "start": 0.77,
+      "end": 0.88,
+      "value": "A"
+    },
+    {
+      "start": 0.88,
+      "end": 0.98,
+      "value": "G"
+    },
+    {
+      "start": 0.98,
+      "end": 1.14,
+      "value": "B"
+    },
+    {
+      "start": 1.14,
+      "end": 1.24,
+      "value": "C"
+    },
+    {
+      "start": 1.24,
+      "end": 1.39,
+      "value": "D"
+    },
+    {
+      "start": 1.39,
+      "end": 1.5,
+      "value": "E"
+    },
+    {
+      "start": 1.5,
+      "end": 1.62,
+      "value": "F"
+    },
+    {
+      "start": 1.62,
+      "end": 1.73,
+      "value": "H"
+    },
+    {
+      "start": 1.73,
+      "end": 1.82,
+      "value": "A"
+    },
+    {
+      "start": 1.82,
+      "end": 1.96,
+      "value": "G"
+    },
+    {
+      "start": 1.96,
+      "end": 2.1,
+      "value": "B"
+    },
+    {
+      "start": 2.1,
+      "end": 2.22,
+      "value": "C"
+    },
+    {
+      "start": 2.22,
+      "end": 2.37,
+      "value": "D"
+    },
+    {
+      "start": 2.37,
+      "end": 2.46,
+      "value": "E"
+    },
+    {
+      "start": 2.46,
+      "end": 2.55,
+      "value": "F"
+    },
+    {
+      "start": 2.55,
+      "end": 2.69,
+      "value": "H"
+    },
+    {
+      "start": 2.69,
+      "end": 2.82,
+      "value": "A"
+    },
+    {
+      "start": 2.82,
+      "end": 2.96,
+      "value": "G"
+    },
+    {
+      "start": 2.96,
+      "end": 3.04,
+      "value": "X"
+    }
+  ]
+}
