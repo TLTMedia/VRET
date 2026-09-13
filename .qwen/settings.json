@@ -1,0 +1,9 @@
+{
+  "api_key": "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",
+  "base_url": "https://openrouter.ai",
+  "model": {
+    "name": "qwen/qwen3.6-max-preview",
+  },
+  "auth_type": "openai",
+  "$version": 4
+}
